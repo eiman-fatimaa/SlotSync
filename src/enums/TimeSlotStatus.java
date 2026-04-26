@@ -1,5 +1,9 @@
 package enums;
 
-public class TimeSlotStatus {
-    
+public enum TimeSlotStatus {
+    FREE,
+    PARTIALLY_BOOKED,
+    LOCKED,
+    CANCELLED,
+    FROZEN
 }
