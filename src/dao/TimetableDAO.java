@@ -1,6 +1,7 @@
 package dao;
 
 import java.sql.*;
+import java.time.LocalTime;
 import java.util.*;
 
 import model.Timetable;
@@ -30,8 +31,8 @@ public class TimetableDAO {
 
                 TimetableEntry entry = new TimetableEntry(
                         rs.getString("day"),
-                        rs.getString("start_time"),
-                        rs.getString("end_time"),
+                        LocalTime.parse(rs.getString("start_time")),
+                        LocalTime.parse(rs.getString("end_time")),
                         rs.getBoolean("is_busy")
                 );
 
@@ -47,15 +48,12 @@ public class TimetableDAO {
 
     public void saveTimetable(Timetable timetable) {
 
-    Connection conn = DBConnection.getConnection();
+        Connection conn = DBConnection.getConnection();
 
-    try {
-        // 1. Insert into professor_timetable
-        String insertPT = "INSERT INTO professor_timetable(professor_id) VALUES (?)";
-        PreparedStatement ptStmt = conn.prepareStatement(insertPT, Statement.RETURN_GENERATED_KEYS);
-
-        for (TimetableEntry entry : timetable.getEntries()) {
-
+        try {
+            // 1. Insert into professor_timetable (once)
+            String insertPT = "INSERT INTO professor_timetable(professor_id) VALUES (?)";
+            PreparedStatement ptStmt = conn.prepareStatement(insertPT, Statement.RETURN_GENERATED_KEYS);
             ptStmt.setInt(1, timetable.getProfessorId());
             ptStmt.executeUpdate();
 
@@ -63,25 +61,26 @@ public class TimetableDAO {
             keys.next();
             int timetableId = keys.getInt(1);
 
-            // 2. Insert into timetable table
+            // 2. Insert each timetable entry
             String insertT = """
                 INSERT INTO timetable(timetable_id, day, start_time, end_time, is_busy)
                 VALUES (?, ?, ?, ?, ?)
             """;
 
-            PreparedStatement tStmt = conn.prepareStatement(insertT);
+            for (TimetableEntry entry : timetable.getEntries()) {
+                PreparedStatement tStmt = conn.prepareStatement(insertT);
 
-            tStmt.setInt(1, timetableId);
-            tStmt.setString(2, entry.getDay());
-            tStmt.setString(3, entry.getStartTime());
-            tStmt.setString(4, entry.getEndTime());
-            tStmt.setBoolean(5, entry.isBusy());
+                tStmt.setInt(1, timetableId);
+                tStmt.setString(2, entry.getDay());
+                tStmt.setString(3, entry.getStartTime().toString());
+                tStmt.setString(4, entry.getEndTime().toString());
+                tStmt.setBoolean(5, entry.isBusy());
 
-            tStmt.executeUpdate();
+                tStmt.executeUpdate();
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-
-    } catch (Exception e) {
-        e.printStackTrace();
-    }
     }
 }

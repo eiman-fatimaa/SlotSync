@@ -11,10 +11,17 @@ public class AuthService {
 
         User user = userDAO.getUserByEmail(email);
 
-        if (user != null && user.getPassword().equals(password)) {
-            return user;
+        if (user == null) {
+            System.out.println("User not found");
+            return null;
         }
 
-        return null;
+        if (!user.getPassword().equals(password)) {
+            System.out.println("Invalid password");
+            return null;
+        }
+
+        System.out.println("Login successful");
+        return user;
     }
 }

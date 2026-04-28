@@ -3,7 +3,6 @@ package model;
 import java.util.List;
 
 public class Timetable {
-
     private int professorId;
     private List<TimetableEntry> entries;
 
@@ -12,11 +11,6 @@ public class Timetable {
         this.entries = entries;
     }
 
-    public int getProfessorId() {
-        return professorId;
-    }
-
-    public List<TimetableEntry> getEntries() {
-        return entries;
-    }
+    public int getProfessorId() { return professorId; }
+    public List<TimetableEntry> getEntries() { return entries; }
 }

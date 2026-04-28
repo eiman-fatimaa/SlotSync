@@ -1,13 +1,15 @@
 package model;
 
-public class TimetableEntry {
+import java.time.LocalTime;
 
+public class TimetableEntry {
     private String day;
-    private String startTime;
-    private String endTime;
+    private LocalTime startTime;
+    private LocalTime endTime;
     private boolean isBusy;
 
-    public TimetableEntry(String day, String startTime, String endTime, boolean isBusy) {
+    public TimetableEntry(String day, LocalTime startTime,
+                          LocalTime endTime, boolean isBusy) {
         this.day = day;
         this.startTime = startTime;
         this.endTime = endTime;
@@ -15,7 +17,7 @@ public class TimetableEntry {
     }
 
     public String getDay() { return day; }
-    public String getStartTime() { return startTime; }
-    public String getEndTime() { return endTime; }
+    public LocalTime getStartTime() { return startTime; }
+    public LocalTime getEndTime() { return endTime; }
     public boolean isBusy() { return isBusy; }
 }

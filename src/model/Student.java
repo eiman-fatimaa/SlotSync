@@ -1,13 +1,14 @@
 package model;
+
 public class Student extends User {
     private int year;
-    private boolean hasClearanceIssue;
 
-    public Student(int id, String name, String email, String password,
-                   int year, boolean hasClearanceIssue) {
-
-        super(id, name, email, password, "STUDENT");
+    public Student(int userId, String email, String password,
+                   String firstName, String lastName,
+                   String phone, int year) {
+        super(userId, email, password, firstName, lastName, phone);
         this.year = year;
-        this.hasClearanceIssue = hasClearanceIssue;
     }
+
+    public int getYear() { return year; }
 }

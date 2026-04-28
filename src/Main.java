@@ -1,21 +1,25 @@
-import dao.UserDAO;
+import service.AuthService;
 import model.User;
+import util.TimetableParser;
+import model.Timetable;
 
 public class Main {
+
     public static void main(String[] args) {
 
-        UserDAO dao = new UserDAO();
+        AuthService auth = new AuthService();
 
-        User user = dao.getUserByEmail("raza.ali@seecs.edu.pk");
+        // 🔹 Test login
+        User user = auth.login("raza.ali@seecs.edu.pk", "ProfRz1");
 
         if (user != null) {
-            System.out.println(user.getName());
-            System.out.println(user.getRole());
-        } else {
-            System.out.println("Not found");
+            System.out.println("Logged in as: " + user.getEmail());
         }
+
+        // 🔹 Test timetable parsing
+        Timetable timetable = TimetableParser.parseJSON(
+                "timetable.json", 11);
+
+        System.out.println("Entries parsed: " + timetable.getEntries().size());
     }
 }
-
-
-
