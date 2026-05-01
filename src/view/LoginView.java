@@ -12,6 +12,8 @@ import model.Professor;
 import model.Student;
 import model.User;
 import main.Main;
+import view.StudentView;
+import view.ProfessorView;
 import service.AuthService;
 
 public class LoginView {

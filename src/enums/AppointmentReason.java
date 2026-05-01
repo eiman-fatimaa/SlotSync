@@ -1,5 +1,12 @@
 package enums;
 
-public class AppointmentReason {
-    
+public enum AppointmentReason {
+    COURSE_REGISTRATION,
+    THESIS_FYP,
+    PAPER_RECHECK,
+    RECOMMENDATION_LETTER,
+    GENERAL_ADVICE,
+    ATTENDANCE_SHORTAGE,
+    CLEARANCE,
+    GRADE_APPEAL
 }

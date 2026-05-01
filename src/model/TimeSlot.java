@@ -1,6 +1,6 @@
 package model;
 
-
+/* 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import enums.TimeSlotStatus;
@@ -13,7 +13,7 @@ public class TimeSlot {
     private int professor_id;
     private LocalTime start_time;
     private LocalTime end_time;
-    private TimeSlotStatus status;
+    private TimeSlotStatus status; 
     private int reserved_count;
     private int current_bookings;
     private int max_capacity;
@@ -155,3 +155,4 @@ public class TimeSlot {
     }
 
 }
+*/

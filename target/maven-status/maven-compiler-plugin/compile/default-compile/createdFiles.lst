@@ -10,6 +10,4 @@ model\Student.class
 service\TimeSlotService.class
 model\TimetableEntry.class
 dao\UserDAO.class
-enums\TimeSlotStatus.class
 model\User.class
-model\TimeSlot.class

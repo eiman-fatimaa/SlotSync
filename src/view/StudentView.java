@@ -1,28 +1,389 @@
 package view;
 
+import enums.AppointmentReason;
+import enums.AppointmentStatus;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Label;
-import javafx.scene.layout.VBox;
+import javafx.scene.control.*;
+import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import main.Main;
+import model.Appointment;
 import model.Student;
+import service.AppointmentService;
+import java.util.List;
 
 public class StudentView {
 
+    private static AppointmentService appointmentService
+        = new AppointmentService();
+
     public static Scene getScene(Student student) {
-        Label title = new Label("Welcome, " + student.getFirstName());
+
+        // ── TOP BAR ────────────────────────────────────
+        Label appTitle = new Label("Appointment System");
+        appTitle.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+
+        Label welcomeLabel = new Label(
+            "Welcome, " + student.getFirstName()
+            + " " + student.getLastName());
+        welcomeLabel.setFont(Font.font("Arial", 14));
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox topBar = new HBox(10, appTitle, spacer, welcomeLabel);
+        topBar.setPadding(new Insets(10, 20, 10, 20));
+        topBar.setAlignment(Pos.CENTER_LEFT);
+        topBar.setStyle("-fx-background-color: #f0f0f0;");
+
+        // ── SIDEBAR ────────────────────────────────────
+        Button viewApptBtn  = new Button("My Appointments");
+        Button bookApptBtn  = new Button("Book Appointment");
+        Button cancelApptBtn = new Button("Cancel Appointment");
+        Button logoutBtn    = new Button("Logout");
+
+        // style all sidebar buttons same size
+        for (Button btn : new Button[]{
+                viewApptBtn, bookApptBtn, cancelApptBtn, logoutBtn}) {
+            btn.setPrefWidth(160);
+            btn.setPrefHeight(35);
+            btn.setFont(Font.font("Arial", 13));
+        }
+
+        VBox sidebar = new VBox(10,
+            viewApptBtn, bookApptBtn, cancelApptBtn, logoutBtn);
+        sidebar.setPadding(new Insets(20));
+        sidebar.setPrefWidth(180);
+        sidebar.setStyle("-fx-background-color: #e8e8e8;");
+
+        // ── MAIN CONTENT AREA ──────────────────────────
+        StackPane contentArea = new StackPane();
+        contentArea.setPadding(new Insets(20));
+
+        // load default view
+        contentArea.getChildren().setAll(
+            buildViewAppointments(student));
+
+        // ── SIDEBAR BUTTON ACTIONS ─────────────────────
+        viewApptBtn.setOnAction(e ->
+            contentArea.getChildren().setAll(
+                buildViewAppointments(student)));
+
+        bookApptBtn.setOnAction(e ->
+            contentArea.getChildren().setAll(
+                buildBookAppointment(student)));
+
+        cancelApptBtn.setOnAction(e ->
+            contentArea.getChildren().setAll(
+                buildCancelAppointment(student)));
+
+        logoutBtn.setOnAction(e ->
+            Main.showLoginScreen());
+
+        // ── ROOT LAYOUT ────────────────────────────────
+        BorderPane root = new BorderPane();
+        root.setTop(topBar);
+        root.setLeft(sidebar);
+        root.setCenter(contentArea);
+
+        return new Scene(root, 800, 600);
+    }
+
+    // ── VIEW MY APPOINTMENTS ───────────────────────────
+    private static VBox buildViewAppointments(Student student) {
+
+        Label title = new Label("My Appointments");
         title.setFont(Font.font("Arial", FontWeight.BOLD, 18));
 
-        Label placeholder = new Label("Student Dashboard - coming soon");
-        placeholder.setFont(Font.font("Arial", 14));
+        // table
+        TableView<Appointment> table = new TableView<>();
+        table.setColumnResizePolicy(
+            TableView.CONSTRAINED_RESIZE_POLICY);
 
-        VBox layout = new VBox(10);
-        layout.setAlignment(Pos.CENTER);
-        layout.setPadding(new Insets(20));
-        layout.getChildren().addAll(title, placeholder);
+        TableColumn<Appointment, Integer> idCol =
+            new TableColumn<>("Appt ID");
+        idCol.setCellValueFactory(
+            new PropertyValueFactory<>("appointmentId"));
 
-        return new Scene(layout, 800, 600);
+        TableColumn<Appointment, Integer> slotCol =
+            new TableColumn<>("Slot ID");
+        slotCol.setCellValueFactory(
+            new PropertyValueFactory<>("slotId"));
+
+        TableColumn<Appointment, String> reasonCol =
+            new TableColumn<>("Reason");
+        reasonCol.setCellValueFactory(
+            new PropertyValueFactory<>("reason"));
+
+        TableColumn<Appointment, String> statusCol =
+            new TableColumn<>("Status");
+        statusCol.setCellValueFactory(
+            new PropertyValueFactory<>("status"));
+
+        TableColumn<Appointment, String> dateCol =
+            new TableColumn<>("Booked At");
+        dateCol.setCellValueFactory(
+            new PropertyValueFactory<>("createdAt"));
+
+        table.getColumns().addAll(
+            idCol, slotCol, reasonCol, statusCol, dateCol);
+
+        // load data
+        List<Appointment> appointments =
+            appointmentService.getStudentAppointments(
+                student.getUserId());
+        table.getItems().addAll(appointments);
+
+        Label countLabel = new Label(
+            "Total: " + appointments.size() + " appointment(s)");
+        countLabel.setFont(Font.font("Arial", 13));
+
+        VBox layout = new VBox(10, title, countLabel, table);
+        layout.setPadding(new Insets(10));
+        return layout;
+    }
+
+    // ── BOOK APPOINTMENT ──────────────────────────────
+    private static VBox buildBookAppointment(Student student) {
+
+        Label title = new Label("Book an Appointment");
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+
+        // reason dropdown
+        Label reasonLabel = new Label("Select Reason:");
+        reasonLabel.setFont(Font.font("Arial", 14));
+
+        ComboBox<AppointmentReason> reasonBox =
+            new ComboBox<>();
+        reasonBox.getItems().addAll(AppointmentReason.values());
+        reasonBox.setPromptText("Choose a reason");
+        reasonBox.setPrefWidth(250);
+
+        // feedback label
+        Label feedbackLabel = new Label("");
+        feedbackLabel.setFont(Font.font("Arial", 13));
+
+        // table of available slots
+        TableView<Object[]> table = new TableView<>();
+        table.setColumnResizePolicy(
+            TableView.CONSTRAINED_RESIZE_POLICY);
+
+        TableColumn<Object[], String> profCol =
+            new TableColumn<>("Professor");
+        profCol.setCellValueFactory(data ->
+            new javafx.beans.property.SimpleStringProperty(
+                (String) data.getValue()[2]));
+
+        TableColumn<Object[], String> dateCol =
+            new TableColumn<>("Date");
+        dateCol.setCellValueFactory(data ->
+            new javafx.beans.property.SimpleStringProperty(
+                data.getValue()[3].toString()));
+
+        TableColumn<Object[], String> startCol =
+            new TableColumn<>("Start");
+        startCol.setCellValueFactory(data ->
+            new javafx.beans.property.SimpleStringProperty(
+                data.getValue()[4].toString()));
+
+        TableColumn<Object[], String> endCol =
+            new TableColumn<>("End");
+        endCol.setCellValueFactory(data ->
+            new javafx.beans.property.SimpleStringProperty(
+                data.getValue()[5].toString()));
+
+        TableColumn<Object[], String> spotsCol =
+            new TableColumn<>("Spots Left");
+        spotsCol.setCellValueFactory(data ->
+            new javafx.beans.property.SimpleStringProperty(
+                data.getValue()[6].toString()));
+
+        // book button column
+        TableColumn<Object[], Void> actionCol =
+            new TableColumn<>("Action");
+        actionCol.setCellFactory(col ->
+            new TableCell<>() {
+                private final Button bookBtn = new Button("Book");
+                {
+                    bookBtn.setPrefWidth(70);
+                    bookBtn.setOnAction(e -> {
+                        Object[] row = getTableView()
+                            .getItems().get(getIndex());
+                        int slotId = (int) row[0];
+
+                        AppointmentReason reason =
+                            reasonBox.getValue();
+
+                        if (reason == null) {
+                            feedbackLabel.setTextFill(Color.RED);
+                            feedbackLabel.setText(
+                                "Please select a reason first");
+                            return;
+                        }
+
+                        boolean success =
+                            appointmentService.bookAppointment(
+                                student.getUserId(), slotId, reason);
+
+                        if (success) {
+                            feedbackLabel.setTextFill(Color.GREEN);
+                            feedbackLabel.setText(
+                                "Appointment booked successfully!");
+                            // refresh table
+                            table.getItems().clear();
+                            table.getItems().addAll(
+                                appointmentService
+                                    .getAvailableSlots());
+                        } else {
+                            feedbackLabel.setTextFill(Color.RED);
+                            feedbackLabel.setText(
+                                "Booking failed. Please try again.");
+                        }
+                    });
+                }
+
+                @Override
+                protected void updateItem(Void item,
+                                           boolean empty) {
+                    super.updateItem(item, empty);
+                    setGraphic(empty ? null : bookBtn);
+                }
+            });
+
+        table.getColumns().addAll(
+            profCol, dateCol, startCol,
+            endCol, spotsCol, actionCol);
+
+        // load available slots
+        List<Object[]> slots = appointmentService.getAvailableSlots();
+        table.getItems().addAll(slots);
+
+        HBox reasonRow = new HBox(10, reasonLabel, reasonBox);
+        reasonRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox layout = new VBox(10,
+            title, reasonRow, feedbackLabel, table);
+        layout.setPadding(new Insets(10));
+        return layout;
+    }
+
+    // ── CANCEL APPOINTMENT ────────────────────────────
+    private static VBox buildCancelAppointment(Student student) {
+
+        Label title = new Label("Cancel an Appointment");
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+
+        Label info = new Label(
+            "Only PENDING and APPROVED appointments can be cancelled.");
+        info.setFont(Font.font("Arial", 13));
+        info.setTextFill(Color.GRAY);
+
+        // feedback label
+        Label feedbackLabel = new Label("");
+        feedbackLabel.setFont(Font.font("Arial", 13));
+
+        // table
+        TableView<Appointment> table = new TableView<>();
+        table.setColumnResizePolicy(
+            TableView.CONSTRAINED_RESIZE_POLICY);
+
+        TableColumn<Appointment, Integer> idCol =
+            new TableColumn<>("Appt ID");
+        idCol.setCellValueFactory(
+            new PropertyValueFactory<>("appointmentId"));
+
+        TableColumn<Appointment, Integer> slotCol =
+            new TableColumn<>("Slot ID");
+        slotCol.setCellValueFactory(
+            new PropertyValueFactory<>("slotId"));
+
+        TableColumn<Appointment, String> reasonCol =
+            new TableColumn<>("Reason");
+        reasonCol.setCellValueFactory(
+            new PropertyValueFactory<>("reason"));
+
+        TableColumn<Appointment, String> statusCol =
+            new TableColumn<>("Status");
+        statusCol.setCellValueFactory(
+            new PropertyValueFactory<>("status"));
+
+        // cancel button column
+        TableColumn<Appointment, Void> actionCol =
+            new TableColumn<>("Action");
+        actionCol.setCellFactory(col ->
+            new TableCell<>() {
+                private final Button cancelBtn =
+                    new Button("Cancel");
+                {
+                    cancelBtn.setPrefWidth(70);
+                    cancelBtn.setStyle(
+                        "-fx-text-fill: red;");
+                    cancelBtn.setOnAction(e -> {
+                        Appointment appt =
+                            getTableView().getItems()
+                                .get(getIndex());
+
+                        boolean success =
+                            appointmentService.cancelAppointment(
+                                appt.getAppointmentId(),
+                                appt.getSlotId());
+
+                        if (success) {
+                            feedbackLabel.setTextFill(Color.GREEN);
+                            feedbackLabel.setText(
+                                "Appointment cancelled successfully!");
+                            // remove from table
+                            getTableView().getItems()
+                                .remove(appt);
+                        } else {
+                            feedbackLabel.setTextFill(Color.RED);
+                            feedbackLabel.setText(
+                                "Could not cancel. Try again.");
+                        }
+                    });
+                }
+
+                @Override
+                protected void updateItem(Void item,
+                                           boolean empty) {
+                    super.updateItem(item, empty);
+                    setGraphic(empty ? null : cancelBtn);
+                }
+            });
+
+        table.getColumns().addAll(
+            idCol, slotCol, reasonCol, statusCol, actionCol);
+
+        // load only PENDING and APPROVED appointments
+        List<Appointment> all =
+            appointmentService.getStudentAppointments(
+                student.getUserId());
+
+        for (Appointment a : all) {
+            if (a.getStatus() == AppointmentStatus.PENDING
+                || a.getStatus() == AppointmentStatus.APPROVED) {
+                table.getItems().add(a);
+            }
+        }
+
+        if (table.getItems().isEmpty()) {
+            Label empty = new Label(
+                "No cancellable appointments found.");
+            empty.setTextFill(Color.GRAY);
+            VBox layout = new VBox(10,
+                title, info, empty);
+            layout.setPadding(new Insets(10));
+            return layout;
+        }
+
+        VBox layout = new VBox(10,
+            title, info, feedbackLabel, table);
+        layout.setPadding(new Insets(10));
+        return layout;
     }
 }
