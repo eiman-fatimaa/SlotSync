@@ -2,6 +2,7 @@ package service;
 
 import dao.AppointmentDAO;
 import enums.AppointmentReason;
+import enums.AppointmentStatus;
 import model.Appointment;
 import java.util.List;
 
@@ -33,4 +34,17 @@ public class AppointmentService {
         }
         return appointmentDAO.cancelAppointment(appointmentId, slotId);
     }
+
+    // to get pending appointments for a professor
+    public List<Appointment> getPendingAppointmentsForProfessor(int professorId) {
+    AppointmentDAO dao = new AppointmentDAO();
+    return dao.getPendingAppointmentsForProfessor(professorId);
+    }
+
+    // to update the appointment status
+    public boolean updateAppointmentStatus(int appointmentId, AppointmentStatus newStatus) {
+    AppointmentDAO dao = new AppointmentDAO();
+    return dao.updateAppointmentStatus(appointmentId, newStatus);
+    }
+
 }

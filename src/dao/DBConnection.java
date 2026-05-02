@@ -24,4 +24,14 @@ public class DBConnection {
         }
         return connection;
     }
+
+    public static void closeConnection() {
+        try {
+            if (connection != null && !connection.isClosed()) {
+                connection.close();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 }

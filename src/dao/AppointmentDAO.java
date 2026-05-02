@@ -199,4 +199,68 @@ public class AppointmentDAO {
             return false;
         }
     }
+
+    // get all the pending appointments for a professor
+    public List<Appointment> getPendingAppointmentsForProfessor(int professorId) {
+    List<Appointment> appointments = new ArrayList<>();
+
+    String sql = "SELECT sa.appointment_id, sa.student_id, sa.slot_id, " +
+                 "ad.status, ad.reason, ad.note, ad.rejection_reason, " +
+                 "ad.created_at, ad.rescheduled_from " +
+                 "FROM student_appointment sa " +
+                 "JOIN appointment_details ad ON sa.appointment_id = ad.appointment_id " +
+                 "JOIN timeslot t ON sa.slot_id = t.slot_id " +
+                 "WHERE t.professor_id = ? " +
+                 "AND ad.status = 'PENDING' " +
+                 "AND t.status NOT IN ('CANCELLED', 'LOCKED') " +
+                 "AND t.slot_date >= CURDATE()";
+
+    try (Connection conn = DBConnection.getConnection();
+         PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+        stmt.setInt(1, professorId);
+        ResultSet rs = stmt.executeQuery();
+
+        while (rs.next()) {
+            Appointment appt = new Appointment(
+                rs.getInt("appointment_id"),
+                rs.getInt("student_id"),
+                rs.getInt("slot_id"),
+                AppointmentStatus.valueOf(rs.getString("status").toUpperCase()),
+                AppointmentReason.valueOf(rs.getString("reason").toUpperCase()),
+                rs.getString("note"),
+                rs.getTimestamp("created_at").toLocalDateTime()
+            );
+
+            appt.setRejectionReason(rs.getString("rejection_reason"));
+            appt.setRescheduledFrom((Integer) rs.getObject("rescheduled_from"));
+
+            appointments.add(appt);
+        }
+    } catch (SQLException e) {
+        e.printStackTrace();
+    }
+
+    return appointments;
+}
+
+    // update appointment status
+    public boolean updateAppointmentStatus(int appointmentId, AppointmentStatus newStatus) {
+    String sql = "UPDATE appointment_details SET status = ? WHERE appointment_id = ?";
+
+    try (Connection conn = DBConnection.getConnection();
+         PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+        stmt.setString(1, newStatus.name()); // store enum as string
+        stmt.setInt(2, appointmentId);
+
+        int rowsUpdated = stmt.executeUpdate();
+        return rowsUpdated > 0;
+    } catch (SQLException e) {
+        e.printStackTrace();
+        return false;
+    }
+    }
+
+
 }
