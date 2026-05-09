@@ -277,6 +277,16 @@ public class AppointmentDAO {
             return false;
         }
 
+        // FETCH ALL DATA BEFORE STARTING TRANSACTION to avoid connection issues
+        Student student = null;
+        TimeSlot slot = null;
+        
+        if (newStatus == AppointmentStatus.WAITLISTED || existing.getStatus() == AppointmentStatus.WAITLISTED) {
+            student = getUserById(existing.getStudentId());
+            TimeSlotDAO timeSlotDAO = new TimeSlotDAO();
+            slot = timeSlotDAO.getSlotById(existing.getSlotId());
+        }
+
         Connection conn = DBConnection.getConnection();
         if (conn == null) {
             return false;
@@ -304,23 +314,40 @@ public class AppointmentDAO {
                     && newStatus == AppointmentStatus.WAITLISTED) {
                 // Add to waitlist tables when transitioning TO WAITLISTED
                 try {
-                    WaitlistService waitlistService = new WaitlistService();
-                    TimeSlotService timeSlotService = new TimeSlotService();
-                    WaitlistDAO waitlistDAO = new WaitlistDAO();
-                    
-                    TimeSlot slot = timeSlotService.getSlotById(existing.getSlotId());
-                    Student student = getUserById(existing.getStudentId());
-                    
                     if (student != null && slot != null) {
                         int priorityScore = PriorityCalculator.calculatePriorityScore(existing, student);
-                        WaitlistEntry entry = new WaitlistEntry(
-                            0, 
-                            student, 
-                            slot, 
-                            priorityScore, 
-                            java.time.LocalDateTime.now()
-                        );
-                        waitlistDAO.addToWaitlist(entry);
+                        
+                        // Insert into waitlisted_student
+                        String insertStudentQuery = "INSERT INTO waitlisted_student(student_id) VALUES (?)";
+                        PreparedStatement ps1 = conn.prepareStatement(insertStudentQuery, new String[]{"waitlist_id"});
+                        ps1.setInt(1, student.getUserId());
+                        int affectedRows = ps1.executeUpdate();
+                        if (affectedRows == 0) {
+                            conn.rollback();
+                            return false;
+                        }
+                        ResultSet generatedKeys = ps1.getGeneratedKeys();
+                        int waitlistId;
+                        if (generatedKeys.next()) {
+                            waitlistId = generatedKeys.getInt(1);
+                        } else {
+                            conn.rollback();
+                            return false;
+                        }
+                        
+                        // Insert into waitlist_details
+                        String insertDetailsQuery = "INSERT INTO waitlist_details (waitlist_id, priority_score, joined_at, slot_id) VALUES (?, ?, ?, ?)";
+                        PreparedStatement ps2 = conn.prepareStatement(insertDetailsQuery);
+                        ps2.setInt(1, waitlistId);
+                        ps2.setInt(2, priorityScore);
+                        ps2.setTimestamp(3, Timestamp.valueOf(java.time.LocalDateTime.now()));
+                        ps2.setInt(4, slot.getSlotID());
+                        int rowsInserted = ps2.executeUpdate();
+                        if (rowsInserted == 0) {
+                            conn.rollback();
+                            return false;
+                        }
+                        
                         System.out.println("Student added to waitlist for appointment " + appointmentId);
                     } else {
                         System.out.println("Failed to fetch student or slot for waitlist");
@@ -337,8 +364,28 @@ public class AppointmentDAO {
                     && newStatus != AppointmentStatus.WAITLISTED) {
                 // Remove from waitlist when transitioning FROM WAITLISTED
                 try {
-                    WaitlistService waitlistService = new WaitlistService();
-                    waitlistService.handleAppointmentCancellation(appointmentId);
+                    // Find the waitlist_id
+                    String selectQuery = "SELECT ws.waitlist_id FROM waitlisted_student ws JOIN waitlist_details wd ON ws.waitlist_id = wd.waitlist_id WHERE ws.student_id = ? AND wd.slot_id = ?";
+                    PreparedStatement psSelect = conn.prepareStatement(selectQuery);
+                    psSelect.setInt(1, existing.getStudentId());
+                    psSelect.setInt(2, existing.getSlotId());
+                    ResultSet rs = psSelect.executeQuery();
+                    if (rs.next()) {
+                        int waitlistId = rs.getInt("waitlist_id");
+                        
+                        // Delete from waitlist_details
+                        String deleteDetailsQuery = "DELETE FROM waitlist_details WHERE waitlist_id = ?";
+                        PreparedStatement ps1 = conn.prepareStatement(deleteDetailsQuery);
+                        ps1.setInt(1, waitlistId);
+                        ps1.executeUpdate();
+                        
+                        // Delete from waitlisted_student
+                        String deleteStudentQuery = "DELETE FROM waitlisted_student WHERE waitlist_id = ?";
+                        PreparedStatement ps2 = conn.prepareStatement(deleteStudentQuery);
+                        ps2.setInt(1, waitlistId);
+                        ps2.executeUpdate();
+                    }
+                    
                     System.out.println("Student removed from waitlist for appointment " + appointmentId);
                 } catch (Exception ex) {
                     System.out.println("Error removing from waitlist: " + ex.getMessage());
@@ -360,11 +407,19 @@ public class AppointmentDAO {
             }
 
             conn.commit();
+            System.out.println("Appointment " + appointmentId + " status updated to " + newStatus);
             return true;
         } catch (SQLException e) {
             e.printStackTrace();
             try { conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
             return false;
+        } finally {
+            try {
+                conn.setAutoCommit(true);
+                conn.close();
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+            }
         }
     }
 

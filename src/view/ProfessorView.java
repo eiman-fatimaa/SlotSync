@@ -137,6 +137,9 @@ public class ProfessorView {
             if (success) {
                 appt.setStatus(selected); // update local object
                 getTableView().refresh(); // refresh table UI
+                if (selected != AppointmentStatus.PENDING) {
+                    getTableView().getItems().remove(appt);
+                }
             }
         });
     }
