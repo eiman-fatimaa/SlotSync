@@ -3,6 +3,12 @@ package dao;
 import enums.AppointmentReason;
 import enums.AppointmentStatus;
 import model.Appointment;
+import model.Student;
+import model.TimeSlot;
+import model.WaitlistEntry;
+import service.TimeSlotService;
+import service.WaitlistService;
+import priority.PriorityCalculator;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -127,20 +133,7 @@ public class AppointmentDAO {
                 Timestamp.valueOf(LocalDateTime.now()));
             detailStmt.executeUpdate();
 
-            // 3. update timeslot current_bookings and status
-            String updateSlot = """
-                UPDATE timeslot
-                SET current_bookings = current_bookings + 1,
-                    status = CASE
-                        WHEN current_bookings + 1 >= max_capacity THEN 'LOCKED'
-                        ELSE 'PARTIALLY_BOOKED'
-                    END
-                WHERE slot_id = ?
-            """;
-            PreparedStatement slotStmt = conn.prepareStatement(updateSlot);
-            slotStmt.setInt(1, slotId);
-            slotStmt.executeUpdate();
-
+            // booking remains PENDING; count and slot locking happen when a professor approves the appointment
             conn.commit();
             return true;
 
@@ -151,51 +144,83 @@ public class AppointmentDAO {
         }
     }
 
-    // cancel an appointment — only PENDING or APPROVED
+    // cancel an appointment — only pending, approved, or waitlisted
     public boolean cancelAppointment(int appointmentId, int slotId) {
         Connection conn = DBConnection.getConnection();
-        if (conn == null) return false;
+        if (conn == null) {
+            System.out.println("Failed to get database connection");
+            return false;
+        }
 
         try {
             conn.setAutoCommit(false);
 
-            // 1. update appointment status to CANCELLED
-            String updateAppt = """
-                UPDATE appointment_details
-                SET status = 'CANCELLED'
-                WHERE appointment_id = ?
-                AND status IN ('PENDING', 'APPROVED')
+            // Fetch appointment details using the same connection
+            String selectAppt = """
+                SELECT sa.appointment_id, sa.student_id, sa.slot_id, ad.status
+                FROM student_appointment sa
+                JOIN appointment_details ad ON sa.appointment_id = ad.appointment_id
+                WHERE sa.appointment_id = ?
             """;
-            PreparedStatement apptStmt = conn.prepareStatement(updateAppt);
-            apptStmt.setInt(1, appointmentId);
-            int rows = apptStmt.executeUpdate();
+            PreparedStatement selectStmt = conn.prepareStatement(selectAppt);
+            selectStmt.setInt(1, appointmentId);
+            ResultSet rs = selectStmt.executeQuery();
 
-            // if no rows updated it means status wasnt PENDING or APPROVED
-            if (rows == 0) {
+            if (!rs.next()) {
+                System.out.println("Appointment not found: " + appointmentId);
                 conn.rollback();
                 return false;
             }
 
-            // 2. update timeslot current_bookings and status
-            String updateSlot = """
-                UPDATE timeslot
-                SET current_bookings = current_bookings - 1,
-                    status = CASE
-                        WHEN current_bookings - 1 = 0 THEN 'FREE'
-                        ELSE 'PARTIALLY_BOOKED'
-                    END
-                WHERE slot_id = ?
+            String statusStr = rs.getString("status");
+            AppointmentStatus originalStatus = AppointmentStatus.valueOf(statusStr);
+            System.out.println("Current appointment status: " + originalStatus);
+
+            // Check if appointment can be cancelled
+            if (!statusStr.equals("PENDING") && !statusStr.equals("APPROVED") && !statusStr.equals("WAITLISTED")) {
+                System.out.println("Appointment cannot be cancelled - status is: " + statusStr);
+                conn.rollback();
+                return false;
+            }
+
+            // Update appointment to CANCELLED
+            String updateAppt = """
+                UPDATE appointment_details
+                SET status = 'CANCELLED'
+                WHERE appointment_id = ?
             """;
-            PreparedStatement slotStmt = conn.prepareStatement(updateSlot);
-            slotStmt.setInt(1, slotId);
-            slotStmt.executeUpdate();
+            PreparedStatement updateStmt = conn.prepareStatement(updateAppt);
+            updateStmt.setInt(1, appointmentId);
+            int rows = updateStmt.executeUpdate();
+            System.out.println("Rows updated: " + rows);
+
+            if (rows == 0) {
+                System.out.println("Failed to update appointment status");
+                conn.rollback();
+                return false;
+            }
+
+            // If appointment was APPROVED, decrement slot booking count
+            if (originalStatus == AppointmentStatus.APPROVED) {
+                if (!adjustSlotBookingCount(conn, slotId, -1)) {
+                    System.out.println("Failed to adjust slot booking count");
+                    conn.rollback();
+                    return false;
+                }
+            }
 
             conn.commit();
+            System.out.println("Appointment cancelled successfully");
             return true;
 
         } catch (Exception e) {
+            System.out.println("Error cancelling appointment: " + e.getMessage());
             e.printStackTrace();
-            try { conn.rollback(); } catch (Exception ex) { ex.printStackTrace(); }
+            try {
+                conn.rollback();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
             return false;
         }
     }
@@ -212,8 +237,9 @@ public class AppointmentDAO {
                  "JOIN timeslot t ON sa.slot_id = t.slot_id " +
                  "WHERE t.professor_id = ? " +
                  "AND ad.status = 'PENDING' " +
-                 "AND t.status NOT IN ('CANCELLED', 'LOCKED') " +
-                 "AND t.slot_date >= CURDATE()";
+                "AND t.status NOT IN ('CANCELLED', 'LOCKED') ";
+                //  +
+                //  "AND t.slot_date >= CURDATE()";    temporarily allow past pending appts to show for testing
 
     try (Connection conn = DBConnection.getConnection();
          PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -244,23 +270,240 @@ public class AppointmentDAO {
     return appointments;
 }
 
-    // update appointment status
+    // update appointment status and adjust slot booking counts on approval/cancellation
     public boolean updateAppointmentStatus(int appointmentId, AppointmentStatus newStatus) {
-    String sql = "UPDATE appointment_details SET status = ? WHERE appointment_id = ?";
+        Appointment existing = getAppointmentById(appointmentId);
+        if (existing == null) {
+            return false;
+        }
 
-    try (Connection conn = DBConnection.getConnection();
-         PreparedStatement stmt = conn.prepareStatement(sql)) {
+        Connection conn = DBConnection.getConnection();
+        if (conn == null) {
+            return false;
+        }
 
-        stmt.setString(1, newStatus.name()); // store enum as string
-        stmt.setInt(2, appointmentId);
+        try {
+            conn.setAutoCommit(false);
 
-        int rowsUpdated = stmt.executeUpdate();
-        return rowsUpdated > 0;
-    } catch (SQLException e) {
-        e.printStackTrace();
+            if (existing.getStatus() != AppointmentStatus.APPROVED
+                    && newStatus == AppointmentStatus.APPROVED) {
+                if (!adjustSlotBookingCount(conn, existing.getSlotId(), +1)) {
+                    conn.rollback();
+                    return false;
+                }
+            } else if (existing.getStatus() == AppointmentStatus.APPROVED
+                    && newStatus != AppointmentStatus.APPROVED) {
+                if (!adjustSlotBookingCount(conn, existing.getSlotId(), -1)) {
+                    conn.rollback();
+                    return false;
+                }
+            }
+
+            // Handle WAITLISTED transitions
+            if (existing.getStatus() != AppointmentStatus.WAITLISTED
+                    && newStatus == AppointmentStatus.WAITLISTED) {
+                // Add to waitlist tables when transitioning TO WAITLISTED
+                try {
+                    WaitlistService waitlistService = new WaitlistService();
+                    TimeSlotService timeSlotService = new TimeSlotService();
+                    WaitlistDAO waitlistDAO = new WaitlistDAO();
+                    
+                    TimeSlot slot = timeSlotService.getSlotById(existing.getSlotId());
+                    Student student = getUserById(existing.getStudentId());
+                    
+                    if (student != null && slot != null) {
+                        int priorityScore = PriorityCalculator.calculatePriorityScore(existing, student);
+                        WaitlistEntry entry = new WaitlistEntry(
+                            0, 
+                            student, 
+                            slot, 
+                            priorityScore, 
+                            java.time.LocalDateTime.now()
+                        );
+                        waitlistDAO.addToWaitlist(entry);
+                        System.out.println("Student added to waitlist for appointment " + appointmentId);
+                    } else {
+                        System.out.println("Failed to fetch student or slot for waitlist");
+                        conn.rollback();
+                        return false;
+                    }
+                } catch (Exception ex) {
+                    System.out.println("Error adding to waitlist: " + ex.getMessage());
+                    ex.printStackTrace();
+                    conn.rollback();
+                    return false;
+                }
+            } else if (existing.getStatus() == AppointmentStatus.WAITLISTED
+                    && newStatus != AppointmentStatus.WAITLISTED) {
+                // Remove from waitlist when transitioning FROM WAITLISTED
+                try {
+                    WaitlistService waitlistService = new WaitlistService();
+                    waitlistService.handleAppointmentCancellation(appointmentId);
+                    System.out.println("Student removed from waitlist for appointment " + appointmentId);
+                } catch (Exception ex) {
+                    System.out.println("Error removing from waitlist: " + ex.getMessage());
+                    ex.printStackTrace();
+                    conn.rollback();
+                    return false;
+                }
+            }
+
+            String sql = "UPDATE appointment_details SET status = ? WHERE appointment_id = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, newStatus.name());
+                stmt.setInt(2, appointmentId);
+                int rowsUpdated = stmt.executeUpdate();
+                if (rowsUpdated == 0) {
+                    conn.rollback();
+                    return false;
+                }
+            }
+
+            conn.commit();
+            return true;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            try { conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
+            return false;
+        }
+    }
+
+    // Helper method to get student by ID
+    private Student getUserById(int userId) {
+        String sql = """
+            SELECT ue.user_id, ue.email, ud.password_hash, ud.first_name, ud.last_name, ud.phone_number, s.year
+            FROM user_email ue
+            JOIN user_details ud ON ue.user_id = ud.user_id
+            JOIN student s ON ue.user_id = s.student_id
+            WHERE ue.user_id = ?
+        """;
+        
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                return new Student(
+                    rs.getInt("user_id"),
+                    rs.getString("email"),
+                    rs.getString("password_hash"),
+                    rs.getString("first_name"),
+                    rs.getString("last_name"),
+                    rs.getString("phone_number"),
+                    rs.getInt("year")
+                );
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    private boolean adjustSlotBookingCount(Connection conn, int slotId, int delta) throws SQLException {
+        if (delta == 1) {
+            String sql = """
+                UPDATE timeslot
+                SET current_bookings = current_bookings + 1,
+                    status = CASE
+                        WHEN current_bookings + 1 >= max_capacity THEN 'LOCKED'
+                        ELSE 'PARTIALLY_BOOKED'
+                    END
+                WHERE slot_id = ?
+                  AND current_bookings < max_capacity
+            """;
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setInt(1, slotId);
+                return stmt.executeUpdate() > 0;
+            }
+        } else if (delta == -1) {
+            String sql = """
+                UPDATE timeslot
+                SET current_bookings = current_bookings - 1,
+                    status = CASE
+                        WHEN current_bookings - 1 = 0 THEN 'FREE'
+                        ELSE 'PARTIALLY_BOOKED'
+                    END
+                WHERE slot_id = ?
+                  AND current_bookings > 0
+            """;
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setInt(1, slotId);
+                return stmt.executeUpdate() > 0;
+            }
+        }
         return false;
     }
+
+    // get appointment by id
+    public Appointment getAppointmentById(int appointmentId) {
+        String sql = "SELECT sa.appointment_id, sa.student_id, sa.slot_id, " +
+                     "ad.status, ad.reason, ad.note, ad.rejection_reason, " +
+                     "ad.created_at, ad.rescheduled_from " +
+                     "FROM student_appointment sa " +
+                     "JOIN appointment_details ad ON sa.appointment_id = ad.appointment_id " +
+                     "WHERE sa.appointment_id = ?";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, appointmentId);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                Appointment appt = new Appointment(
+                    rs.getInt("appointment_id"),
+                    rs.getInt("student_id"),
+                    rs.getInt("slot_id"),
+                    AppointmentStatus.valueOf(rs.getString("status").toUpperCase()),
+                    AppointmentReason.valueOf(rs.getString("reason").toUpperCase()),
+                    rs.getString("note"),
+                    rs.getTimestamp("created_at").toLocalDateTime()
+                );
+                appt.setRejectionReason(rs.getString("rejection_reason"));
+                appt.setRescheduledFrom((Integer) rs.getObject("rescheduled_from"));
+                return appt;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
+    // get appointment by student and slot
+    public Appointment getAppointmentByStudentAndSlot(int studentId, int slotId) {
+        String sql = "SELECT sa.appointment_id, sa.student_id, sa.slot_id, " +
+                     "ad.status, ad.reason, ad.note, ad.rejection_reason, " +
+                     "ad.created_at, ad.rescheduled_from " +
+                     "FROM student_appointment sa " +
+                     "JOIN appointment_details ad ON sa.appointment_id = ad.appointment_id " +
+                     "WHERE sa.student_id = ? AND sa.slot_id = ?";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, studentId);
+            stmt.setInt(2, slotId);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                Appointment appt = new Appointment(
+                    rs.getInt("appointment_id"),
+                    rs.getInt("student_id"),
+                    rs.getInt("slot_id"),
+                    AppointmentStatus.valueOf(rs.getString("status").toUpperCase()),
+                    AppointmentReason.valueOf(rs.getString("reason").toUpperCase()),
+                    rs.getString("note"),
+                    rs.getTimestamp("created_at").toLocalDateTime()
+                );
+                appt.setRejectionReason(rs.getString("rejection_reason"));
+                appt.setRescheduledFrom((Integer) rs.getObject("rescheduled_from"));
+                return appt;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
 
 }

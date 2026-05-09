@@ -18,8 +18,10 @@ import main.Main;
 import model.Appointment;
 import model.Professor;
 import model.TimeSlot;
+import model.WaitlistEntry;
 import service.AppointmentService;
 import service.TimeSlotService;
+import service.WaitlistService;
 
 public class ProfessorView {
 
@@ -41,19 +43,20 @@ public class ProfessorView {
 
         // ── SIDEBAR ───────────────────────────────
         Button pendingBtn   = new Button("Pending Requests");
+        Button waitlistBtn  = new Button("Waitlist Management");
         Button pastBtn  = new Button("Past Slots");
         Button upcomingBtn  = new Button("Upcoming Slots");
         Button logoutBtn    = new Button("Logout");
 
         for (Button btn : new Button[]{
-                pendingBtn, pastBtn, upcomingBtn, logoutBtn}) {
+                pendingBtn, waitlistBtn, pastBtn, upcomingBtn, logoutBtn}) {
             btn.setPrefWidth(180);
             btn.setPrefHeight(35);
             btn.setFont(Font.font("Arial", 13));
         }
 
         VBox sidebar = new VBox(10,
-            pendingBtn, pastBtn, upcomingBtn, logoutBtn);
+            pendingBtn, waitlistBtn, pastBtn, upcomingBtn, logoutBtn);
         sidebar.setPadding(new Insets(20));
         sidebar.setPrefWidth(200);
         sidebar.setStyle("-fx-background-color: #addfd5;");
@@ -67,6 +70,8 @@ public class ProfessorView {
         
         pendingBtn.setOnAction(e ->
             contentArea.getChildren().setAll(buildPendingAppointmentsView(professor)));
+        waitlistBtn.setOnAction(e ->
+            contentArea.getChildren().setAll(buildWaitlistManagementView(professor)));
         pastBtn.setOnAction(e ->
             contentArea.getChildren().setAll(buildPastWeekSlotsView(professor)));
         upcomingBtn.setOnAction(e ->
@@ -325,6 +330,112 @@ public class ProfessorView {
     table.setPrefWidth(800);
 
     return table;
+    }
+
+    // helper method to build waitlist management view
+    private static VBox buildWaitlistManagementView(Professor professor) {
+        VBox container = new VBox(10);
+        container.setPadding(new Insets(20));
+
+        Label title = new Label("Waitlist Management");
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+
+        // Slot selector
+        ComboBox<TimeSlot> slotSelector = new ComboBox<>();
+        slotSelector.setPromptText("Select Slot to View Waitlist");
+
+        slotSelector.setCellFactory(list -> new ListCell<>() {
+            @Override
+            protected void updateItem(TimeSlot slot, boolean empty) {
+                super.updateItem(slot, empty);
+                if (empty || slot == null) {
+                    setText(null);
+                } else {
+                    setText("Slot " + slot.getSlotID() + " — " + slot.getSlotDate() + " " + slot.getStartTime() + " to " + slot.getEndTime());
+                }
+            }
+        });
+
+        slotSelector.setConverter(new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(TimeSlot slot) {
+                if (slot == null) return "";
+                return "Slot " + slot.getSlotID() + " — " + slot.getSlotDate() + " " + slot.getStartTime() + " to " + slot.getEndTime();
+            }
+
+            @Override
+            public TimeSlot fromString(String string) {
+                return null;
+            }
+        });
+
+        // Populate slot selector with professor's slots
+        TimeSlotService timeSlotService = new TimeSlotService();
+        List<TimeSlot> professorSlots = timeSlotService.getProfessorUpcomingSlots(professor.getUserId());
+        slotSelector.getItems().addAll(professorSlots);
+
+        // Waitlist table
+        TableView<WaitlistEntry> waitlistTable = new TableView<>();
+
+        TableColumn<WaitlistEntry, String> studentCol = new TableColumn<>("Student");
+        studentCol.setCellValueFactory(cellData ->
+            new SimpleStringProperty(cellData.getValue().getStudent().getFirstName() + " " +
+                                   cellData.getValue().getStudent().getLastName()));
+
+        TableColumn<WaitlistEntry, Integer> priorityCol = new TableColumn<>("Priority");
+        priorityCol.setCellValueFactory(new PropertyValueFactory<>("priorityScore"));
+
+        TableColumn<WaitlistEntry, String> joinedCol = new TableColumn<>("Joined At");
+        joinedCol.setCellValueFactory(cellData ->
+            new SimpleStringProperty(cellData.getValue().getJoinedAt().toString()));
+
+        TableColumn<WaitlistEntry, Void> removeCol = new TableColumn<>("Remove");
+        removeCol.setCellFactory(col -> new TableCell<>() {
+            private final Button removeBtn = new Button("Remove");
+
+            {
+                removeBtn.setOnAction(e -> {
+                    WaitlistEntry entry = getTableView().getItems().get(getIndex());
+                    WaitlistService waitlistService = new WaitlistService();
+                    boolean success = waitlistService.removeFromWaitlist(entry.getWaitlistId());
+                    if (success) {
+                        getTableView().getItems().remove(entry);
+                        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                        alert.setTitle("Success");
+                        alert.setHeaderText("Student removed from waitlist");
+                        alert.showAndWait();
+                    } else {
+                        Alert alert = new Alert(Alert.AlertType.ERROR);
+                        alert.setTitle("Error");
+                        alert.setHeaderText("Failed to remove from waitlist");
+                        alert.showAndWait();
+                    }
+                });
+            }
+
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                setGraphic(empty ? null : removeBtn);
+            }
+        });
+
+        waitlistTable.getColumns().addAll(studentCol, priorityCol, joinedCol, removeCol);
+
+        // Slot selector action
+        slotSelector.setOnAction(e -> {
+            TimeSlot selectedSlot = slotSelector.getValue();
+            if (selectedSlot != null) {
+                WaitlistService waitlistService = new WaitlistService();
+                List<WaitlistEntry> waitlist = waitlistService.getWaitlistBySlot(selectedSlot.getSlotID());
+                waitlistTable.getItems().setAll(waitlist);
+            } else {
+                waitlistTable.getItems().clear();
+            }
+        });
+
+        container.getChildren().addAll(title, slotSelector, waitlistTable);
+        return container;
     }
 
 }

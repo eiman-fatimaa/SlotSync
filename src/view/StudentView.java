@@ -14,7 +14,9 @@ import javafx.scene.text.FontWeight;
 import main.Main;
 import model.Appointment;
 import model.Student;
+import model.WaitlistEntry;
 import service.AppointmentService;
+import service.WaitlistService;
 import java.util.List;
 
 public class StudentView {
@@ -44,19 +46,20 @@ public class StudentView {
         // ── SIDEBAR ────────────────────────────────────
         Button viewApptBtn  = new Button("My Appointments");
         Button bookApptBtn  = new Button("Book Appointment");
+        Button waitlistBtn  = new Button("My Waitlist");
         Button cancelApptBtn = new Button("Cancel Appointment");
         Button logoutBtn    = new Button("Logout");
 
         // style all sidebar buttons same size
         for (Button btn : new Button[]{
-                viewApptBtn, bookApptBtn, cancelApptBtn, logoutBtn}) {
+                viewApptBtn, bookApptBtn, waitlistBtn, cancelApptBtn, logoutBtn}) {
             btn.setPrefWidth(160);
             btn.setPrefHeight(35);
             btn.setFont(Font.font("Arial", 13));
         }
 
         VBox sidebar = new VBox(10,
-            viewApptBtn, bookApptBtn, cancelApptBtn, logoutBtn);
+            viewApptBtn, bookApptBtn, waitlistBtn, cancelApptBtn, logoutBtn);
         sidebar.setPadding(new Insets(20));
         sidebar.setPrefWidth(180);
         sidebar.setStyle("-fx-background-color: #e8e8e8;");
@@ -77,6 +80,10 @@ public class StudentView {
         bookApptBtn.setOnAction(e ->
             contentArea.getChildren().setAll(
                 buildBookAppointment(student)));
+
+        waitlistBtn.setOnAction(e ->
+            contentArea.getChildren().setAll(
+                buildViewWaitlist(student)));
 
         cancelApptBtn.setOnAction(e ->
             contentArea.getChildren().setAll(
@@ -149,6 +156,50 @@ public class StudentView {
     }
 
     // ── BOOK APPOINTMENT ──────────────────────────────
+    private static VBox buildViewWaitlist(Student student) {
+        Label title = new Label("My Waitlist");
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+
+        TableView<WaitlistEntry> table = new TableView<>();
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+
+        TableColumn<WaitlistEntry, Integer> idCol = new TableColumn<>("Waitlist ID");
+        idCol.setCellValueFactory(
+            new PropertyValueFactory<>("waitlistId"));
+
+        TableColumn<WaitlistEntry, Integer> slotCol = new TableColumn<>("Slot ID");
+        slotCol.setCellValueFactory(cellData ->
+            new javafx.beans.property.SimpleIntegerProperty(
+                cellData.getValue().getSlot().getSlotID()).asObject());
+
+        TableColumn<WaitlistEntry, String> studentCol = new TableColumn<>("Student");
+        studentCol.setCellValueFactory(cellData ->
+            new javafx.beans.property.SimpleStringProperty(
+                cellData.getValue().getStudent().getFirstName() + " " +
+                cellData.getValue().getStudent().getLastName()));
+
+        TableColumn<WaitlistEntry, Integer> priorityCol = new TableColumn<>("Priority");
+        priorityCol.setCellValueFactory(
+            new PropertyValueFactory<>("priorityScore"));
+
+        TableColumn<WaitlistEntry, String> joinedCol = new TableColumn<>("Joined At");
+        joinedCol.setCellValueFactory(cellData ->
+            new javafx.beans.property.SimpleStringProperty(
+                cellData.getValue().getJoinedAt().toString()));
+
+        table.getColumns().addAll(
+            idCol, slotCol, studentCol, priorityCol, joinedCol);
+
+        WaitlistService waitlistService = new WaitlistService();
+        List<WaitlistEntry> waitlist =
+            waitlistService.getWaitlistByStudent(student.getUserId());
+        table.getItems().addAll(waitlist);
+
+        VBox layout = new VBox(10, title, table);
+        layout.setPadding(new Insets(10));
+        return layout;
+    }
+
     private static VBox buildBookAppointment(Student student) {
 
         Label title = new Label("Book an Appointment");
@@ -279,7 +330,7 @@ public class StudentView {
         title.setFont(Font.font("Arial", FontWeight.BOLD, 18));
 
         Label info = new Label(
-            "Only PENDING and APPROVED appointments can be cancelled.");
+            "Only PENDING, APPROVED, and WAITLISTED appointments can be cancelled.");
         info.setFont(Font.font("Arial", 13));
         info.setTextFill(Color.GRAY);
 
@@ -333,18 +384,20 @@ public class StudentView {
                                 appt.getAppointmentId(),
                                 appt.getSlotId());
 
+                        Alert alert;
                         if (success) {
-                            feedbackLabel.setTextFill(Color.GREEN);
-                            feedbackLabel.setText(
-                                "Appointment cancelled successfully!");
-                            // remove from table
-                            getTableView().getItems()
-                                .remove(appt);
+                            alert = new Alert(Alert.AlertType.INFORMATION);
+                            alert.setTitle("Success");
+                            alert.setHeaderText("Appointment Cancelled");
+                            alert.setContentText("Your appointment has been cancelled successfully.");
+                            getTableView().getItems().remove(appt);
                         } else {
-                            feedbackLabel.setTextFill(Color.RED);
-                            feedbackLabel.setText(
-                                "Could not cancel. Try again.");
+                            alert = new Alert(Alert.AlertType.ERROR);
+                            alert.setTitle("Cancellation Failed");
+                            alert.setHeaderText("Unable to cancel appointment");
+                            alert.setContentText("Failed to cancel the appointment. Please try again.");
                         }
+                        alert.showAndWait();
                     });
                 }
 
@@ -366,7 +419,8 @@ public class StudentView {
 
         for (Appointment a : all) {
             if (a.getStatus() == AppointmentStatus.PENDING
-                || a.getStatus() == AppointmentStatus.APPROVED) {
+                || a.getStatus() == AppointmentStatus.APPROVED
+                || a.getStatus() == AppointmentStatus.WAITLISTED) {
                 table.getItems().add(a);
             }
         }

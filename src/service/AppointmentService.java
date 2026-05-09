@@ -32,7 +32,30 @@ public class AppointmentService {
             System.out.println("Invalid appointment ID");
             return false;
         }
-        return appointmentDAO.cancelAppointment(appointmentId, slotId);
+
+        // Get appointment status before cancelling
+        Appointment appointment = appointmentDAO.getAppointmentById(appointmentId);
+        if (appointment == null) {
+            return false;
+        }
+
+        AppointmentStatus originalStatus = appointment.getStatus();
+
+        // Cancel the appointment
+        boolean cancelled = appointmentDAO.cancelAppointment(appointmentId, slotId);
+        if (!cancelled) {
+            return false;
+        }
+
+        // Handle waitlist logic
+        WaitlistService waitlistService = new WaitlistService();
+        if (originalStatus == AppointmentStatus.WAITLISTED) {
+            waitlistService.handleAppointmentCancellation(appointmentId);
+        } else if (originalStatus == AppointmentStatus.APPROVED) {
+            waitlistService.promoteFromWaitlist(slotId);
+        }
+
+        return true;
     }
 
     // to get pending appointments for a professor
