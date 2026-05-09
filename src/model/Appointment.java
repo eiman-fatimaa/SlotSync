@@ -14,6 +14,10 @@ public class Appointment {
     private String rejectionReason;
     private LocalDateTime createdAt;
     private Integer rescheduledFrom;
+    private String professorName;
+    private java.time.LocalDate slotDate;
+    private java.time.LocalTime slotStartTime;
+    private java.time.LocalTime slotEndTime;
 
     public Appointment(int appointmentId, int studentId, int slotId,
                        AppointmentStatus status, AppointmentReason reason,
@@ -39,4 +43,12 @@ public class Appointment {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public Integer getRescheduledFrom() { return rescheduledFrom; }
     public void setRescheduledFrom(Integer r) { this.rescheduledFrom = r; }
+    public String getProfessorName()            { return professorName; }
+    public void setProfessorName(String n)      { this.professorName = n; }
+    public java.time.LocalDate getSlotDate()    { return slotDate; }
+    public void setSlotDate(java.time.LocalDate d) { this.slotDate = d; }
+    public java.time.LocalTime getSlotStartTime()  { return slotStartTime; }
+    public void setSlotStartTime(java.time.LocalTime t) { this.slotStartTime = t; }
+    public java.time.LocalTime getSlotEndTime()    { return slotEndTime; }
+    public void setSlotEndTime(java.time.LocalTime t)   { this.slotEndTime = t; }
 }
