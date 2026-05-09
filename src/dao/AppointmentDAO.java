@@ -24,10 +24,14 @@ public class AppointmentDAO {
 
         String query = """
             SELECT ad.appointment_id, sa.student_id, sa.slot_id,
-                   ad.status, ad.reason, ad.note,
-                   ad.rejection_reason, ad.created_at, ad.rescheduled_from
+                ad.status, ad.reason, ad.note,
+                ad.rejection_reason, ad.created_at, ad.rescheduled_from,
+                ud.first_name, ud.last_name,
+                t.slot_date, t.start_time, t.end_time
             FROM student_appointment sa
             JOIN appointment_details ad ON sa.appointment_id = ad.appointment_id
+            JOIN timeslot t ON sa.slot_id = t.slot_id
+            JOIN user_details ud ON t.professor_id = ud.user_id
             WHERE sa.student_id = ?
             ORDER BY ad.created_at DESC
         """;
@@ -36,6 +40,7 @@ public class AppointmentDAO {
             stmt.setInt(1, studentId);
             ResultSet rs = stmt.executeQuery();
 
+            // REPLACE WITH THIS — adds the extra fields:
             while (rs.next()) {
                 Appointment a = new Appointment(
                     rs.getInt("appointment_id"),
@@ -50,6 +55,14 @@ public class AppointmentDAO {
                 Integer reschedFrom = rs.getObject("rescheduled_from") != null
                     ? rs.getInt("rescheduled_from") : null;
                 a.setRescheduledFrom(reschedFrom);
+
+                // SET PROFESSOR NAME AND SLOT DETAILS
+                a.setProfessorName(
+                    rs.getString("first_name") + " " + rs.getString("last_name"));
+                a.setSlotDate(rs.getDate("slot_date").toLocalDate());
+                a.setSlotStartTime(rs.getTime("start_time").toLocalTime());
+                a.setSlotEndTime(rs.getTime("end_time").toLocalTime());
+
                 list.add(a);
             }
         } catch (Exception e) {
@@ -73,6 +86,7 @@ public class AppointmentDAO {
             JOIN user_details ud ON t.professor_id = ud.user_id
             WHERE t.status IN ('FREE', 'PARTIALLY_BOOKED')
             AND t.is_manually_blocked_by_prof = FALSE
+            AND t.slot_date >= CURDATE()
             ORDER BY t.slot_date, t.start_time
         """;
 
