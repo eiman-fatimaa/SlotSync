@@ -3,22 +3,25 @@ package model;
 import enums.AppointmentReason;
 import enums.AppointmentStatus;
 import java.time.LocalDateTime;
-
+//represnets a single appt btw a student and prof
 public class Appointment {
+    //core appt data members
     private int appointmentId;
     private int studentId;
     private int slotId;
-    private AppointmentStatus status;
-    private AppointmentReason reason;
-    private String note;
-    private String rejectionReason;
-    private LocalDateTime createdAt;
-    private Integer rescheduledFrom;
+    private AppointmentStatus status;//pending, approved etc
+    private AppointmentReason reason;//reason for appt
+    private String note;//optional note from student
+    private String rejectionReason;//filled by prof if rejected
+    private LocalDateTime createdAt;//when appt boked
+    private Integer rescheduledFrom;//id of original appt if rescheduled
+    //extra field populated from timeslot and user_details join for display purposes
     private String professorName;
     private java.time.LocalDate slotDate;
     private java.time.LocalTime slotStartTime;
     private java.time.LocalTime slotEndTime;
 
+    //constructor
     public Appointment(int appointmentId, int studentId, int slotId,
                        AppointmentStatus status, AppointmentReason reason,
                        String note, LocalDateTime createdAt) {
@@ -30,7 +33,7 @@ public class Appointment {
         this.note = note;
         this.createdAt = createdAt;
     }
-
+    //getter and setters
     public int getAppointmentId()       { return appointmentId; }
     public int getStudentId()           { return studentId; }
     public int getSlotId()              { return slotId; }

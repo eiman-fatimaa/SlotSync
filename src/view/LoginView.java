@@ -15,9 +15,9 @@ import main.Main;
 import view.StudentView;
 import view.ProfessorView;
 import service.AuthService;
-
+//builds the login screen - first window after app launches
 public class LoginView {
-
+    //builds and returns logic scene
     public static Scene getScene() {
 
         // ── TITLE ──────────────────────────────────────

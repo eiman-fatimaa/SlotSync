@@ -1,17 +1,17 @@
 package dao;
 
 import model.*;
-
 import java.sql.*;
-
+//handles all db quereis relaetd to users (students and professors)
 public class UserDAO {
-
+    //fetches a user from db by email and returns their role - students/prof obj
     public User getUserByEmail(String email) {
         Connection conn = DBConnection.getConnection();
         if (conn == null) {
             System.out.println("Database connection failed");
             return null;
         }
+        //query to fetch user details along with role-specific info (year for students, department for professors)
         String query = """
             SELECT ue.user_id, ue.email, ud.password_hash, ud.role,
                    ud.first_name, ud.last_name, ud.phone_number,
@@ -36,7 +36,7 @@ public class UserDAO {
                 String fname = rs.getString("first_name");
                 String lname = rs.getString("last_name");
                 String phone = rs.getString("phone_number");
-
+                //returns a student or professor object based on the role, with all relevant details populated
                 if (role.equals("STUDENT")) {
                     int year = rs.getInt("year");
                     return new Student(id, email, pass, fname, lname, phone, year);
@@ -52,13 +52,14 @@ public class UserDAO {
 
         return null;
     }
-
+    //fetches user from db  by their id and retirn stident or prof obj
     public User getUserById(int userId) {
         Connection conn = DBConnection.getConnection();
         if (conn == null) {
             System.out.println("Database connection failed");
             return null;
         }
+        //similar to email query- query to fetch user details along with role-specific info (year for students, department for professors) based on user id
         String query = """
             SELECT ue.user_id, ue.email, ud.password_hash, ud.role,
                    ud.first_name, ud.last_name, ud.phone_number,
@@ -84,7 +85,7 @@ public class UserDAO {
                 String fname = rs.getString("first_name");
                 String lname = rs.getString("last_name");
                 String phone = rs.getString("phone_number");
-
+                //returns correct subclass based on role
                 if (role.equals("STUDENT")) {
                     int year = rs.getInt("year");
                     return new Student(id, email, pass, fname, lname, phone, year);

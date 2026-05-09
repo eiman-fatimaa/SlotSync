@@ -18,12 +18,12 @@ import model.WaitlistEntry;
 import service.AppointmentService;
 import service.WaitlistService;
 import java.util.List;
-
+//builds complete student dashboard
 public class StudentView {
-
+    //a single shared appt sevice used all across tudent view
     private static AppointmentService appointmentService
         = new AppointmentService();
-
+    //returns main student scene with sidebar and content area
     public static Scene getScene(Student student) {
 
         // ── TOP BAR ────────────────────────────────────

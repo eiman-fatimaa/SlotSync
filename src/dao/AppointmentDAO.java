@@ -14,14 +14,15 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+//handles all db connections related to appointmnets
 public class AppointmentDAO {
 
-    // get all appointments for a student
+    // get all appointments for a student_including prof name and slot details
     public List<Appointment> getAppointmentsByStudent(int studentId) {
         List<Appointment> list = new ArrayList<>();
         Connection conn = DBConnection.getConnection();
         if (conn == null) return list;
-
+        //joins timeslot and user_detials to get pof name, date and time alongside appt info
         String query = """
             SELECT ad.appointment_id, sa.student_id, sa.slot_id,
                 ad.status, ad.reason, ad.note,
@@ -42,6 +43,7 @@ public class AppointmentDAO {
 
             // REPLACE WITH THIS — adds the extra fields:
             while (rs.next()) {
+                //builds appt obj from result row
                 Appointment a = new Appointment(
                     rs.getInt("appointment_id"),
                     rs.getInt("student_id"),
@@ -52,11 +54,12 @@ public class AppointmentDAO {
                     rs.getTimestamp("created_at").toLocalDateTime()
                 );
                 a.setRejectionReason(rs.getString("rejection_reason"));
+                //reschedule_from is nullable so v check it before to avoid any exception
                 Integer reschedFrom = rs.getObject("rescheduled_from") != null
                     ? rs.getInt("rescheduled_from") : null;
                 a.setRescheduledFrom(reschedFrom);
 
-                // SET PROFESSOR NAME AND SLOT DETAILS
+                //SET PROFESSOR NAME AND SLOT DETAILS
                 a.setProfessorName(
                     rs.getString("first_name") + " " + rs.getString("last_name"));
                 a.setSlotDate(rs.getDate("slot_date").toLocalDate());
@@ -71,12 +74,12 @@ public class AppointmentDAO {
         return list;
     }
 
-    // get all FREE and PARTIALLY_BOOKED slots with professor name
+    //get all FREE and PARTIALLY_BOOKED slots with professor name
     public List<Object[]> getAvailableSlots() {
         List<Object[]> list = new ArrayList<>();
         Connection conn = DBConnection.getConnection();
         if (conn == null) return list;
-
+        //only shows slots that r bookkable - not manually block and from now() onwards
         String query = """
             SELECT t.slot_id, t.professor_id,
                    ud.first_name, ud.last_name,
@@ -93,14 +96,15 @@ public class AppointmentDAO {
         try (PreparedStatement stmt = conn.prepareStatement(query)) {
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
+                //each row is an obj array - so index positions r used  in studentview table columns
                 Object[] row = new Object[]{
-                    rs.getInt("slot_id"),
-                    rs.getInt("professor_id"),
-                    rs.getString("first_name") + " " + rs.getString("last_name"),
-                    rs.getDate("slot_date").toLocalDate(),
-                    rs.getTime("start_time").toLocalTime(),
-                    rs.getTime("end_time").toLocalTime(),
-                    rs.getInt("max_capacity") - rs.getInt("current_bookings")
+                    rs.getInt("slot_id"),//[0] slot id
+                    rs.getInt("professor_id"),//[1] prof id
+                    rs.getString("first_name") + " " + rs.getString("last_name"),//[2] prof name
+                    rs.getDate("slot_date").toLocalDate(),//[3] date
+                    rs.getTime("start_time").toLocalTime(),//[4] start time
+                    rs.getTime("end_time").toLocalTime(),//[5] end time
+                    rs.getInt("max_capacity") - rs.getInt("current_bookings")//[6] available spots
                 };
                 list.add(row);
             }
@@ -110,16 +114,16 @@ public class AppointmentDAO {
         return list;
     }
 
-    // book an appointment
+    // book an appointment - inserts it as pending appt into student_appt and appt_detals table in db
     public boolean bookAppointment(int studentId, int slotId,
                                     AppointmentReason reason) {
         Connection conn = DBConnection.getConnection();
         if (conn == null) return false;
 
         try {
-            conn.setAutoCommit(false);
+            conn.setAutoCommit(false);//begin transaction
 
-            // 1. insert into student_appointment
+            // 1. insert into student_appointment (links student and slot)
             String insertAppt = """
                 INSERT INTO student_appointment (student_id, slot_id)
                 VALUES (?, ?)
@@ -129,12 +133,12 @@ public class AppointmentDAO {
             apptStmt.setInt(1, studentId);
             apptStmt.setInt(2, slotId);
             apptStmt.executeUpdate();
-
+            //gets autogenerates appt id
             ResultSet keys = apptStmt.getGeneratedKeys();
             keys.next();
             int appointmentId = keys.getInt(1);
 
-            // 2. insert into appointment_details
+            // 2. insert into appointment_details with status: pending
             String insertDetails = """
                 INSERT INTO appointment_details
                 (appointment_id, status, reason, created_at)
@@ -169,7 +173,7 @@ public class AppointmentDAO {
         try {
             conn.setAutoCommit(false);
 
-            // Fetch appointment details using the same connection
+            //fetch appointment details using the same connection
             String selectAppt = """
                 SELECT sa.appointment_id, sa.student_id, sa.slot_id, ad.status
                 FROM student_appointment sa
@@ -190,14 +194,14 @@ public class AppointmentDAO {
             AppointmentStatus originalStatus = AppointmentStatus.valueOf(statusStr);
             System.out.println("Current appointment status: " + originalStatus);
 
-            // Check if appointment can be cancelled
+            //check if appointment can be cancelled - only pending, approved and wailtisted can be cance;;led
             if (!statusStr.equals("PENDING") && !statusStr.equals("APPROVED") && !statusStr.equals("WAITLISTED")) {
                 System.out.println("Appointment cannot be cancelled - status is: " + statusStr);
                 conn.rollback();
                 return false;
             }
 
-            // Update appointment to CANCELLED
+            //update appointment to CANCELLED
             String updateAppt = """
                 UPDATE appointment_details
                 SET status = 'CANCELLED'
@@ -239,10 +243,10 @@ public class AppointmentDAO {
         }
     }
 
-    // get all the pending appointments for a professor
+    // get all the pending appointments for a professor's slot
     public List<Appointment> getPendingAppointmentsForProfessor(int professorId) {
     List<Appointment> appointments = new ArrayList<>();
-
+    //excludes slots that r cancelled or lcoked
     String sql = "SELECT sa.appointment_id, sa.student_id, sa.slot_id, " +
                  "ad.status, ad.reason, ad.note, ad.rejection_reason, " +
                  "ad.created_at, ad.rescheduled_from " +
@@ -308,13 +312,14 @@ public class AppointmentDAO {
 
         try {
             conn.setAutoCommit(false);
-
+            //if moving to approved, increments booking count
             if (existing.getStatus() != AppointmentStatus.APPROVED
                     && newStatus == AppointmentStatus.APPROVED) {
                 if (!adjustSlotBookingCount(conn, existing.getSlotId(), +1)) {
                     conn.rollback();
                     return false;
                 }
+            //if moving from approved, decrement slot bokoking count
             } else if (existing.getStatus() == AppointmentStatus.APPROVED
                     && newStatus != AppointmentStatus.APPROVED) {
                 if (!adjustSlotBookingCount(conn, existing.getSlotId(), -1)) {
@@ -323,11 +328,12 @@ public class AppointmentDAO {
                 }
             }
 
-            // Handle WAITLISTED transitions
+            //if transistioning to waitlised, add student to wailist table
             if (existing.getStatus() != AppointmentStatus.WAITLISTED
                     && newStatus == AppointmentStatus.WAITLISTED) {
                 // Add to waitlist tables when transitioning TO WAITLISTED
                 try {
+                    //calculate student score based on reason and student yr
                     if (student != null && slot != null) {
                         int priorityScore = PriorityCalculator.calculatePriorityScore(existing, student);
                         
@@ -374,6 +380,7 @@ public class AppointmentDAO {
                     conn.rollback();
                     return false;
                 }
+            //if transjitong from waitlisted, remove student from waitlist table
             } else if (existing.getStatus() == AppointmentStatus.WAITLISTED
                     && newStatus != AppointmentStatus.WAITLISTED) {
                 // Remove from waitlist when transitioning FROM WAITLISTED
@@ -408,7 +415,7 @@ public class AppointmentDAO {
                     return false;
                 }
             }
-
+            //update the status in appt_details
             String sql = "UPDATE appointment_details SET status = ? WHERE appointment_id = ?";
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, newStatus.name());
@@ -437,7 +444,7 @@ public class AppointmentDAO {
         }
     }
 
-    // Helper method to get student by ID
+    //helper method to get student by ID fro waitlist processing
     private Student getUserById(int userId) {
         String sql = """
             SELECT ue.user_id, ue.email, ud.password_hash, ud.first_name, ud.last_name, ud.phone_number, s.year
@@ -468,9 +475,11 @@ public class AppointmentDAO {
         }
         return null;
     }
-
+    //helper method - incrents or decremnts slot booking count and updates slot sttaus
+    //delts +1 when approving and -1 when cancelling an approved appt
     private boolean adjustSlotBookingCount(Connection conn, int slotId, int delta) throws SQLException {
         if (delta == 1) {
+            //increment an dlock slot if now at max capacity
             String sql = """
                 UPDATE timeslot
                 SET current_bookings = current_bookings + 1,
@@ -486,6 +495,7 @@ public class AppointmentDAO {
                 return stmt.executeUpdate() > 0;
             }
         } else if (delta == -1) {
+            //decremnt and free slot if no bookings remain
             String sql = """
                 UPDATE timeslot
                 SET current_bookings = current_bookings - 1,
@@ -504,7 +514,7 @@ public class AppointmentDAO {
         return false;
     }
 
-    // get appointment by id
+    //gets a single appt by its id
     public Appointment getAppointmentById(int appointmentId) {
         String sql = "SELECT sa.appointment_id, sa.student_id, sa.slot_id, " +
                      "ad.status, ad.reason, ad.note, ad.rejection_reason, " +
@@ -539,7 +549,7 @@ public class AppointmentDAO {
         return null;
     }
 
-    // get appointment by student and slot
+    //get appointment by student and slot id
     public Appointment getAppointmentByStudentAndSlot(int studentId, int slotId) {
         String sql = "SELECT sa.appointment_id, sa.student_id, sa.slot_id, " +
                      "ad.status, ad.reason, ad.note, ad.rejection_reason, " +

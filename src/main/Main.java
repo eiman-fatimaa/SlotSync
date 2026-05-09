@@ -6,6 +6,7 @@ import javafx.stage.Stage;
 import model.User;
 import view.LoginView;
 
+//manages a single window and scene switching
 public class Main extends Application {
 
     // one single window shared by everyone
@@ -13,7 +14,7 @@ public class Main extends Application {
 
     // the logged in user stored here so all views can access it
     private static User currentUser;
-
+    //sets up the window and shows the login screen
     @Override
     public void start(Stage stage) {
         primaryStage = stage;
@@ -48,11 +49,11 @@ public class Main extends Application {
     public static User getCurrentUser() {
         return currentUser;
     }
-
+    //used if a view needs direct stage access
     public static Stage getStage() {
         return primaryStage;
     }
-
+    //main for javafx
     public static void main(String[] args) {
         launch(args);
     }
