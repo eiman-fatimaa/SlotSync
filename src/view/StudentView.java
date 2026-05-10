@@ -260,6 +260,19 @@ public class StudentView {
                 cellData.getValue().getProfessorName()));
         profCol.setPrefWidth(130);
 
+                List<Appointment> appointments =
+            appointmentService.getStudentAppointments(student.getUserId());
+
+        // TEMP DEBUG
+        System.out.println("Appointments fetched: " + appointments.size());
+        for (Appointment a : appointments) {
+            System.out.println("  ID=" + a.getAppointmentId()
+                + " status=" + a.getStatus()
+                + " prof=" + a.getProfessorName()
+                + " date=" + a.getSlotDate()
+                + " start=" + a.getSlotStartTime());
+        }
+
         // ── Slot date ──
         TableColumn<Appointment, String> dateCol = new TableColumn<>("Date");
         dateCol.setCellValueFactory(cellData ->
@@ -278,14 +291,20 @@ public class StudentView {
         });
         timeCol.setPrefWidth(120);
 
-        // ── Reason ──
+        // Reason — call toString() explicitly on the enum
         TableColumn<Appointment, String> reasonCol = new TableColumn<>("Reason");
-        reasonCol.setCellValueFactory(new PropertyValueFactory<>("reason"));
+        reasonCol.setCellValueFactory(cellData ->
+            new javafx.beans.property.SimpleStringProperty(
+                cellData.getValue().getReason() != null
+                    ? cellData.getValue().getReason().toString() : "—"));
         reasonCol.setPrefWidth(110);
 
-        // ── Status — colour-coded ──
+        // Status — call toString() explicitly on the enum
         TableColumn<Appointment, String> statusCol = new TableColumn<>("Status");
-        statusCol.setCellValueFactory(new PropertyValueFactory<>("status"));
+        statusCol.setCellValueFactory(cellData ->
+            new javafx.beans.property.SimpleStringProperty(
+                cellData.getValue().getStatus() != null
+                    ? cellData.getValue().getStatus().toString() : "—"));
         statusCol.setCellFactory(col -> buildApptStatusCell());
         statusCol.setPrefWidth(100);
 
@@ -303,8 +322,6 @@ public class StudentView {
             idCol, slotCol, profCol, dateCol, timeCol, reasonCol, statusCol, bookedCol);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
 
-        List<Appointment> appointments =
-            appointmentService.getStudentAppointments(student.getUserId());
         table.getItems().addAll(appointments);
 
         // ── Count badge ──
@@ -572,12 +589,17 @@ public class StudentView {
         slotCol.setPrefWidth(60);
 
         TableColumn<Appointment, String> reasonCol = new TableColumn<>("Reason");
-        reasonCol.setCellValueFactory(new PropertyValueFactory<>("reason"));
+        reasonCol.setCellValueFactory(cellData ->
+            new javafx.beans.property.SimpleStringProperty(
+                cellData.getValue().getReason() != null
+                    ? cellData.getValue().getReason().toString() : "—"));
         reasonCol.setPrefWidth(130);
 
-        // Status — colour-coded
         TableColumn<Appointment, String> statusCol = new TableColumn<>("Status");
-        statusCol.setCellValueFactory(new PropertyValueFactory<>("status"));
+        statusCol.setCellValueFactory(cellData ->
+            new javafx.beans.property.SimpleStringProperty(
+                cellData.getValue().getStatus() != null
+                    ? cellData.getValue().getStatus().toString() : "—"));
         statusCol.setCellFactory(col -> buildApptStatusCell());
         statusCol.setPrefWidth(100);
 
@@ -633,29 +655,46 @@ public class StudentView {
                 table.getItems().add(a);
             }
         }
+        // TEMP DEBUG
+        System.out.println("Cancel view — total appointments: " + all.size());
+        for (Appointment a : all) {
+            System.out.println("  ID=" + a.getAppointmentId() + " status=" + a.getStatus());
+        }
 
-        // ── Empty state ──
+        // Filter: only include cancellable statuses
+        for (Appointment a : all) {
+            if (a.getStatus() == AppointmentStatus.PENDING
+                || a.getStatus() == AppointmentStatus.APPROVED
+                || a.getStatus() == AppointmentStatus.WAITLISTED) {
+                table.getItems().add(a);
+            }
+        }
+
+        VBox card = new VBox(14);
+        card.setFillWidth(true);
+        card.setMaxWidth(Double.MAX_VALUE);
+        card.setMaxHeight(Double.MAX_VALUE);
+
+        Label titleLabel = new Label("❌  Cancel an Appointment");
+        titleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 20));
+        titleLabel.setTextFill(Color.web(TEXT_PRIMARY));
+
+        card.getChildren().addAll(titleLabel, infoBanner);
+
         if (table.getItems().isEmpty()) {
             Label emptyLabel = new Label("No cancellable appointments found.");
             emptyLabel.setFont(Font.font("Segoe UI", 14));
             emptyLabel.setTextFill(Color.web(TEXT_MUTED));
-
-            VBox card = new VBox(16);
-            card.getChildren().addAll(
-                buildCardHeader("❌  Cancel an Appointment", ""),
-                infoBanner,
-                emptyLabel
-            );
-            card.setPadding(new Insets(24));
-            applyCardStyle(card);
-            return card;
+            card.getChildren().add(emptyLabel);
+        } else {
+            card.getChildren().add(table);
+            VBox.setVgrow(table, Priority.ALWAYS);
         }
 
-        return wrapInCard("❌  Cancel an Appointment",
-            table, infoBanner, null);
-    }
-
-
+        card.setPadding(new Insets(24));
+        applyCardStyle(card);
+        return card
+            ;}
     // ══════════════════════════════════════════════════════════════════
     // PRIVATE HELPERS — STYLE & LAYOUT
     // ══════════════════════════════════════════════════════════════════

@@ -1,18 +1,21 @@
 package dao;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
 import enums.AppointmentReason;
 import enums.AppointmentStatus;
 import model.Appointment;
 import model.Student;
 import model.TimeSlot;
-import model.WaitlistEntry;
-import service.TimeSlotService;
-import service.WaitlistService;
 import priority.PriorityCalculator;
-import java.sql.*;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 //handles all db connections related to appointmnets
 public class AppointmentDAO {

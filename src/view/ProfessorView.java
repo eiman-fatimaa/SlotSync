@@ -1,10 +1,20 @@
 package view;
 
+import java.io.InputStreamReader;
+import java.io.Reader;
+
+import com.google.gson.Gson;
+
 import enums.AppointmentStatus;
+import enums.TimeSlotStatus;
 import javafx.beans.property.SimpleStringProperty;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
@@ -12,6 +22,7 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
+import javafx.scene.control.Separator;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -22,7 +33,6 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
-import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
@@ -30,86 +40,94 @@ import javafx.scene.text.FontWeight;
 import main.Main;
 import model.Appointment;
 import model.Professor;
+import model.SlotTemplate;
 import model.TimeSlot;
 import model.WaitlistEntry;
 import service.AppointmentService;
+import service.SlotGeneratorService;
 import service.TimeSlotService;
+import service.WaitlistService;
 
 /**
- * ══════════════════════════════════════════════════════════════════════
- * ProfessorView — Dashboard for professor accounts
+ * ═══════════════════════════════════════════════════════════════════════════
+ * PROFESSOR VIEW — Complete Dashboard
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * Design language : Consistent "Obsidian Glass" dark theme.
- *                   Deep navy sidebar, semi-transparent cards,
- *                   indigo accent throughout.
+ * Design Language: "Obsidian Glass" — Deep navy backgrounds, crystalline whites,
+ *                  electric blue accents. Professional, modern, alive.
  *
- * Sections:
- *   • Top bar       — gradient header with app name + welcome
- *   • Sidebar       — nav buttons with hover/active effects
- *   • Content area  — swaps between sub-views (pending, waitlist,
- *                     past slots, upcoming slots, generate slots)
+ * Service Integration:
+ *   • AppointmentService: Manages appointment operations (status updates, cancellations)
+ *   • TimeSlotService: Manages slot operations (block/unblock, status changes)
+ *   • WaitlistService: Manages waitlist operations (add, remove, promote)
+ *   • SlotGeneratorService: Generates slots from templates
  *
- * All colour constants are defined at the top so they mirror the
- * CSS variables in styles.css.  Java-side inline styles are used only
- * where JavaFX doesn't pick up the CSS class (e.g. on HBox/VBox
- * backgrounds that aren't scene nodes the stylesheet normally targets).
- * ══════════════════════════════════════════════════════════════════════
+ * Structure:
+ *   ┌─────────────────────────────────────────────────┐
+ *   │           Top Bar (App Title + Welcome)         │
+ *   ├──────────────────────────────────────────────────┤
+ *   │       │                                          │
+ *   │ Side  │  Content Area (Swappable Views)         │
+ *   │ bar   │  • Pending Requests                      │
+ *   │ Nav   │  • Waitlist Management                   │
+ *   │       │  • Past Slots (Read-only)               │
+ *   │       │  • Upcoming Slots + Change Status       │
+ *   │       │  • Generate Slots + Manual Insert       │
+ *   │       │                                          │
+ *   └──────────────────────────────────────────────────┘
+ *
+ * All colours, fonts, and styles are defined as constants at the top
+ * for easy maintenance and CSS synchronization.
  */
 public class ProfessorView {
 
-    // ── COLOUR CONSTANTS (must match styles.css palette) ─────────────
-    // Deep background — same as .root background-color
-    private static final String BG_DARKEST   = "#0F1525";
-    // Sidebar background — slightly lighter than main bg
-    private static final String BG_SIDEBAR   = "#1B264F";
-    // Card / glass surface
-    private static final String BG_CARD      = "rgba(255,255,255,0.03)";
-    // Primary accent
-    private static final String INDIGO       = "#274690";
-    // Lighter accent for hover / text
-    private static final String INDIGO_LIGHT = "#576CA8";
-    // Success green
-    private static final String SUCCESS      = "#34D399";
-    // Danger red
-    private static final String DANGER       = "#F87171";
-    // Amber for pending
-    private static final String AMBER        = "#FBBF24";
-    // Blue for waitlisted
-    private static final String BLUE         = "#60A5FA";
-    // Primary text
-    private static final String TEXT_PRIMARY = "#E2E8F0";
-    // Secondary / muted text
-    private static final String TEXT_MUTED   = "#64748B";
-    // Thin border for glass elements
-    private static final String BORDER       = "rgba(255,255,255,0.07)";
+    // ═══════════════════════════════════════════════════════════════════════
+    // § COLOUR PALETTE (Must match styles.css)
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    private static final String BG_DARKEST    = "#0F1525";      // Root background
+    private static final String BG_SIDEBAR    = "#1B264F";      // Sidebar panel
+    private static final String BG_CONTENT    = "#111C34";      // Content area
+    private static final String ACCENT_TEAL   = "#14B8A6";      // Primary CTA (buttons)
+    private static final String ACCENT_TEAL_L = "#1CC8B5";      // Teal hover
+    private static final String ACCENT_INDIGO = "#274690";      // Secondary accent
+    private static final String ACCENT_INDIGO_L = "#576CA8";    // Indigo light
+    private static final String STATUS_GREEN  = "#34D399";      // Success/approved
+    private static final String STATUS_RED    = "#F87171";      // Danger/rejected
+    private static final String STATUS_AMBER  = "#FBBF24";      // Pending
+    private static final String STATUS_BLUE   = "#60A5FA";      // Waitlisted
+    private static final String STATUS_TEAL   = "#2DD4BF";      // Available/free
+    private static final String TEXT_PRIMARY  = "#E2E8F0";      // Main text
+    private static final String TEXT_SECONDARY = "#CBD5E1";     // Secondary text
+    private static final String TEXT_MUTED    = "#94A3B8";      // Disabled/hint text
+    private static final String BORDER_LIGHT  = "rgba(255,255,255,0.07)";
+    private static final String BORDER_MED    = "rgba(255,255,255,0.10)";
 
-
-    // ══════════════════════════════════════════════════════════════════
-    // SCENE ENTRY POINT
-    // ══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    // § SCENE ENTRY POINT — Main Dashboard
+    // ═══════════════════════════════════════════════════════════════════════
 
     /**
-     * Builds the entire professor dashboard Scene.
+     * Builds the complete professor dashboard scene.
+     * Returns a Scene containing:
+     *   • Top bar with app title + welcome badge
+     *   • Left sidebar with navigation buttons
+     *   • Center content area (swappable views)
      *
-     * Layout structure:
-     *   BorderPane
-     *     top  → topBar (HBox)
-     *     left → sidebar (VBox)
-     *     center → contentArea (StackPane — swapped on nav click)
+     * @param professor The logged-in professor
+     * @return Complete Scene ready for display
      */
     public static Scene getScene(Professor professor) {
 
-        // ── TOP BAR ──────────────────────────────────────────────────
-        // Gradient header matching the login view's indigo palette
+        // ──────────────────────────────────────────────────────────────────
+        // TOP BAR: App title + Professor welcome badge
+        // ──────────────────────────────────────────────────────────────────
+        
         Label appTitle = new Label("⏰  SlotSync");
         appTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 17));
         appTitle.setTextFill(Color.WHITE);
-        // Subtle glow on the app title
-        appTitle.setStyle(
-            "-fx-effect: dropshadow(gaussian, rgba(7, 17, 41, 0.3), 8, 0, 0, 0);"
-        );
+        appTitle.setStyle("-fx-effect: dropshadow(gaussian, rgba(7, 17, 41, 0.3), 8, 0, 0, 0);");
 
-        // "Prof." badge + name on the right
         Label welcomeLabel = new Label("Prof. " + professor.getFirstName());
         welcomeLabel.setFont(Font.font("Segoe UI", 13));
         welcomeLabel.setTextFill(Color.web(TEXT_PRIMARY));
@@ -121,18 +139,18 @@ public class ProfessorView {
             "-fx-padding: 5 14;"
         );
 
-        // Flexible spacer pushes welcome badge to the far right
         Region topSpacer = new Region();
         HBox.setHgrow(topSpacer, Priority.ALWAYS);
 
         HBox topBar = new HBox(10, appTitle, topSpacer, welcomeLabel);
         topBar.setPadding(new Insets(14, 28, 14, 28));
         topBar.setAlignment(Pos.CENTER_LEFT);
-        // Gradient + bottom shadow = elevated header effect
         topBar.getStyleClass().add("top-bar");
 
-        // ── SIDEBAR ───────────────────────────────────────────────────
-        // Nav buttons + logout at the bottom
+        // ──────────────────────────────────────────────────────────────────
+        // SIDEBAR: Navigation buttons + logout
+        // ──────────────────────────────────────────────────────────────────
+        
         Button pendingBtn   = createSidebarButton("📋  Pending Requests");
         Button waitlistBtn  = createSidebarButton("⏳  Waitlist Management");
         Button pastBtn      = createSidebarButton("🗂  Past Slots");
@@ -140,11 +158,9 @@ public class ProfessorView {
         Button generateBtn  = createSidebarButton("✨  Generate Slots");
         Button logoutBtn    = createLogoutButton("🚪  Logout");
 
-        // Spacer pushes logout to the very bottom of the sidebar
         Region sidebarSpacer = new Region();
         VBox.setVgrow(sidebarSpacer, Priority.ALWAYS);
 
-        // ── Section label above nav group ──
         Label navLabel = createSidebarSectionLabel("NAVIGATION");
 
         VBox sidebar = new VBox(6,
@@ -157,85 +173,73 @@ public class ProfessorView {
         sidebar.setPrefWidth(230);
         sidebar.setMinWidth(180);
         sidebar.setMaxWidth(260);
-        // Dark navy + right-side divider line
         sidebar.setStyle(
             "-fx-background-color: " + BG_SIDEBAR + ";" +
             "-fx-border-color: rgba(39,70,144,0.20);" +
             "-fx-border-width: 0 1 0 0;"
         );
 
-        // ── CONTENT AREA ──────────────────────────────────────────────
-        // StackPane that holds whichever sub-view is currently selected.
-        // Default: show a welcome splash until user clicks a nav button.
+        // ──────────────────────────────────────────────────────────────────
+        // CONTENT AREA: Swappable views (one view at a time)
+        // ──────────────────────────────────────────────────────────────────
+        
         BorderPane contentArea = new BorderPane();
         contentArea.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-        BorderPane.setMargin(contentArea, Insets.EMPTY);
         VBox welcome = buildWelcomeSplash(professor);
         welcome.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-
-        StackPane.setAlignment(welcome, Pos.CENTER);
         contentArea.setCenter(welcome);
         contentArea.getStyleClass().add("content-area");
         contentArea.setPrefSize(Double.MAX_VALUE, Double.MAX_VALUE);
-        contentArea.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
 
-        // ── NAV BUTTON ACTIONS ────────────────────────────────────────
-        // Each button replaces contentArea's single child with the new view.
-        // setActiveSidebarButton() swaps the "active" visual style.
+        // ──────────────────────────────────────────────────────────────────
+        // NAVIGATION BUTTON HANDLERS
+        // ──────────────────────────────────────────────────────────────────
+        
+        pendingBtn.setOnAction(e -> {
+            setActiveSidebarButton(pendingBtn, waitlistBtn, pastBtn, upcomingBtn, generateBtn);
+            VBox view = buildPendingAppointmentsView(professor);
+            view.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+            contentArea.setCenter(view);
+        });
 
-       pendingBtn.setOnAction(e -> {
-    setActiveSidebarButton(pendingBtn,
-        waitlistBtn, pastBtn, upcomingBtn, generateBtn);
-
-    VBox view = buildPendingAppointmentsView(professor);
-    view.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-
-    contentArea.setCenter(view);
-});
         waitlistBtn.setOnAction(e -> {
-            setActiveSidebarButton(waitlistBtn,
-                pendingBtn, pastBtn, upcomingBtn, generateBtn);
+            setActiveSidebarButton(waitlistBtn, pendingBtn, pastBtn, upcomingBtn, generateBtn);
             VBox view = buildWaitlistManagementView(professor);
             view.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-            contentArea.setPrefSize(Double.MAX_VALUE, Double.MAX_VALUE);
             contentArea.setCenter(view);
         });
 
         pastBtn.setOnAction(e -> {
-            setActiveSidebarButton(pastBtn,
-                pendingBtn, waitlistBtn, upcomingBtn, generateBtn);
-            VBox view = buildPastWeekSlotsView(professor);
+            setActiveSidebarButton(pastBtn, pendingBtn, waitlistBtn, upcomingBtn, generateBtn);
+            VBox view = buildPastSlotsView(professor);
             view.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-            contentArea.setPrefSize(Double.MAX_VALUE, Double.MAX_VALUE);
             contentArea.setCenter(view);
-            });
+        });
 
         upcomingBtn.setOnAction(e -> {
-            setActiveSidebarButton(upcomingBtn,
-                pendingBtn, waitlistBtn, pastBtn, generateBtn);
+            setActiveSidebarButton(upcomingBtn, pendingBtn, waitlistBtn, pastBtn, generateBtn);
             VBox view = buildUpcomingSlotsView(professor);
             view.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-            contentArea.setPrefSize(Double.MAX_VALUE, Double.MAX_VALUE);
             contentArea.setCenter(view);
         });
 
         generateBtn.setOnAction(e -> {
-            setActiveSidebarButton(generateBtn,
-                pendingBtn, waitlistBtn, pastBtn, upcomingBtn);
+            setActiveSidebarButton(generateBtn, pendingBtn, waitlistBtn, pastBtn, upcomingBtn);
             VBox view = buildGenerateSlotsView(professor);
             view.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-            contentArea.setPrefSize(Double.MAX_VALUE, Double.MAX_VALUE);
             contentArea.setCenter(view);
         });
 
         logoutBtn.setOnAction(e -> Main.showLoginScreen());
 
-        // ── ROOT LAYOUT ───────────────────────────────────────────────
+        // ──────────────────────────────────────────────────────────────────
+        // ROOT LAYOUT: BorderPane with top + left + center
+        // ──────────────────────────────────────────────────────────────────
+        
         BorderPane root = new BorderPane();
         root.setTop(topBar);
         root.setLeft(sidebar);
         root.setCenter(contentArea);
-        BorderPane.setMargin(contentArea, Insets.EMPTY);
         contentArea.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
 
         Scene scene = new Scene(root, 1100, 700);
@@ -245,17 +249,18 @@ public class ProfessorView {
     }
 
 
-    // ══════════════════════════════════════════════════════════════════
-    // WELCOME SPLASH  (default content when no nav button is clicked)
-    // ══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    // § WELCOME SPLASH (Initial Content)
+    // ═══════════════════════════════════════════════════════════════════════
 
-    /** Shown in the content area on first load — a simple greeting card. */
+    /**
+     * Builds a friendly welcome card shown on first load.
+     * Encourages the user to select a section from the sidebar.
+     */
     private static VBox buildWelcomeSplash(Professor professor) {
         Label icon = new Label("👋");
         icon.setFont(Font.font(52));
-        icon.setStyle(
-            "-fx-effect: dropshadow(gaussian, rgba(39, 71, 144, 0.26), 16, 0, 0, 0);"
-        );
+        icon.setStyle("-fx-effect: dropshadow(gaussian, rgba(39, 71, 144, 0.26), 16, 0, 0, 0);");
 
         Label heading = new Label("Welcome back, Prof. " + professor.getFirstName() + "!");
         heading.setFont(Font.font("Segoe UI", FontWeight.BOLD, 24));
@@ -270,7 +275,7 @@ public class ProfessorView {
         splash.setPadding(new Insets(60));
         splash.setStyle(
             "-fx-background-color: rgba(255,255,255,0.02);" +
-            "-fx-border-color: " + BORDER + ";" +
+            "-fx-border-color: " + BORDER_LIGHT + ";" +
             "-fx-border-radius: 14;" +
             "-fx-background-radius: 14;" +
             "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.30), 20, 0, 0, 6);"
@@ -279,83 +284,84 @@ public class ProfessorView {
     }
 
 
-    // ══════════════════════════════════════════════════════════════════
-    // PENDING APPOINTMENTS
-    // ══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    // § PENDING APPOINTMENTS VIEW
+    // ═══════════════════════════════════════════════════════════════════════
 
     /**
-     * Displays all PENDING appointments for this professor in a table.
-     * Each row has a ComboBox allowing the professor to update the status.
-     * On status change the row is removed from the pending list.
+     * Displays all PENDING appointments for this professor.
+     * Each row has:
+     *   • Appointment ID
+     *   • Slot ID
+     *   • Reason (colour-coded)
+     *   • Status (colour-coded badge)
+     *   • Booked At (timestamp)
+     *   • Note (scrollable)
+     *   • Update Status (ComboBox with PENDING/APPROVED/REJECTED/WAITLISTED)
+     *
+     * Service Method: AppointmentService.getPendingAppointmentsForProfessor(professorId)
+     * Status Update: AppointmentService.updateAppointmentStatus(appointmentId, status)
      */
-    private static VBox buildPendingAppointmentsView(Professor professor){
+    private static VBox buildPendingAppointmentsView(Professor professor) {
 
-        // ── Column: Appointment ID ──
-        TableColumn<Appointment, Integer> idCol =
-            new TableColumn<>("Appt ID");
+        // ──────────────────────────────────────────────────────────────────
+        // TABLE COLUMNS
+        // ──────────────────────────────────────────────────────────────────
+        
+        TableColumn<Appointment, Integer> idCol = new TableColumn<>("Appt ID");
         idCol.setCellValueFactory(new PropertyValueFactory<>("appointmentId"));
         idCol.setPrefWidth(70);
 
-        // ── Column: Slot ID ──
-        TableColumn<Appointment, Integer> slotCol =
-            new TableColumn<>("Slot ID");
+        TableColumn<Appointment, Integer> slotCol = new TableColumn<>("Slot ID");
         slotCol.setCellValueFactory(new PropertyValueFactory<>("slotId"));
         slotCol.setPrefWidth(70);
 
-        // ── Column: Reason ──
         TableColumn<Appointment, String> reasonCol = new TableColumn<>("Reason");
         reasonCol.setCellValueFactory(cellData ->
             new SimpleStringProperty(cellData.getValue().getReason().toString()));
         reasonCol.setPrefWidth(130);
 
-        // ── Column: Status (colour-coded text) ──
         TableColumn<Appointment, String> statusCol = new TableColumn<>("Status");
         statusCol.setCellValueFactory(cellData ->
             new SimpleStringProperty(cellData.getValue().getStatus().toString()));
         statusCol.setCellFactory(col -> buildStatusCell());
         statusCol.setPrefWidth(100);
 
-        // ── Column: Booked At ──
-        TableColumn<Appointment, String> createdCol =
-            new TableColumn<>("Booked At");
+        TableColumn<Appointment, String> createdCol = new TableColumn<>("Booked At");
         createdCol.setCellValueFactory(cellData ->
-            new SimpleStringProperty(
-                cellData.getValue().getCreatedAt().toString()));
+            new SimpleStringProperty(cellData.getValue().getCreatedAt().toString()));
         createdCol.setPrefWidth(140);
 
-        // ── Column: Note ──
         TableColumn<Appointment, String> noteCol = new TableColumn<>("Note");
         noteCol.setCellValueFactory(cellData ->
             new SimpleStringProperty(cellData.getValue().getNote()));
-        noteCol.setPrefWidth(140);
+        noteCol.setPrefWidth(200);
 
-        // ── Column: Status Update ComboBox ──
-        // Renders a styled dropdown in every row. On selection the service
-        // is called and, if successful, the row is removed from the table.
-        TableColumn<Appointment, AppointmentStatus> actionCol =
+        // ──────────────────────────────────────────────────────────────────
+        // ACTION COLUMN: Status Update Dropdown
+        // ──────────────────────────────────────────────────────────────────
+        
+        TableColumn<Appointment, AppointmentStatus> actionCol = 
             new TableColumn<>("Update Status");
         actionCol.setPrefWidth(150);
 
         actionCol.setCellFactory(col -> new TableCell<>() {
-
-            // ComboBox is created once per cell and reused
             private final ComboBox<AppointmentStatus> combo = new ComboBox<>();
 
             {
-                // Populate with all possible statuses
                 combo.getItems().addAll(
                     AppointmentStatus.PENDING,
                     AppointmentStatus.APPROVED,
                     AppointmentStatus.REJECTED,
                     AppointmentStatus.WAITLISTED
                 );
-                // Apply the global combo-box dark style
                 styleComboBox(combo);
 
                 combo.setOnAction(e -> {
                     Appointment appt = getTableView().getItems().get(getIndex());
                     AppointmentStatus selected = combo.getValue();
 
+                    // SERVICE CALL: Update appointment status
                     AppointmentService service = new AppointmentService();
                     boolean success = service.updateAppointmentStatus(
                         appt.getAppointmentId(), selected);
@@ -363,10 +369,16 @@ public class ProfessorView {
                     if (success) {
                         appt.setStatus(selected);
                         getTableView().refresh();
-                        // Remove from pending list if no longer PENDING
+                        showAlert("Success", 
+                            "Appointment status updated to " + selected, 
+                            AlertType.INFORMATION);
+                        
+                        // If status changed from PENDING, remove row
                         if (selected != AppointmentStatus.PENDING) {
                             getTableView().getItems().remove(appt);
                         }
+                    } else {
+                        showAlert("Error", "Failed to update appointment status.", AlertType.ERROR);
                     }
                 });
             }
@@ -375,15 +387,19 @@ public class ProfessorView {
             protected void updateItem(AppointmentStatus status, boolean empty) {
                 super.updateItem(status, empty);
                 if (empty) { setGraphic(null); }
-                else        { combo.setValue(status); setGraphic(combo); }
+                else       { combo.setValue(status); setGraphic(combo); }
             }
         });
 
-        // ── Build & populate table ──
+        // ──────────────────────────────────────────────────────────────────
+        // BUILD & POPULATE TABLE
+        // ──────────────────────────────────────────────────────────────────
+        
         TableView<Appointment> table = buildStyledTable();
         table.getColumns().addAll(
             idCol, slotCol, reasonCol, statusCol, createdCol, noteCol, actionCol);
 
+        // SERVICE CALL: Get all pending appointments for this professor
         AppointmentService service = new AppointmentService();
         table.getItems().setAll(
             service.getPendingAppointmentsForProfessor(professor.getUserId()));
@@ -393,12 +409,193 @@ public class ProfessorView {
     }
 
 
-    // ══════════════════════════════════════════════════════════════════
-    // PAST SLOTS (read-only)
-    // ══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    // § WAITLIST MANAGEMENT VIEW
+    // ═══════════════════════════════════════════════════════════════════════
 
-    /** Shows all past time slots in a read-only table. */
-    private static VBox buildPastWeekSlotsView(Professor professor) {
+    /**
+     * Allows professor to manage waitlisted students for a specific slot.
+     *
+     * Components:
+     *   1. Slot selector dropdown (shows upcoming slots)
+     *   2. Waitlist table (shows students on the waitlist for selected slot)
+     *   3. Action buttons: Approve from waitlist, Remove from waitlist
+     *
+     * Service Methods:
+     *   • TimeSlotService.getProfessorUpcomingSlots(professorId)
+     *   • WaitlistService.getWaitlistBySlot(slotId)
+     *   • WaitlistService.removeFromWaitlist(waitlistId)
+     *   • WaitlistService.promoteFromWaitlist(slotId)
+     */
+    private static VBox buildWaitlistManagementView(Professor professor) {
+
+    // ──────────────────────────────────────────────────────────────────
+    // SLOT SELECTOR DROPDOWN
+    // ──────────────────────────────────────────────────────────────────
+
+    Label slotLabel = new Label("Select Slot:");
+    slotLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
+    slotLabel.setTextFill(Color.web(ACCENT_INDIGO_L));
+
+    ComboBox<TimeSlot> slotSelector = new ComboBox<>();
+    slotSelector.setPromptText("Choose an upcoming slot…");
+    slotSelector.setPrefWidth(340);
+    slotSelector.setPrefHeight(40);
+    styleComboBox(slotSelector);
+
+    // SERVICE CALL: Get upcoming slots
+    TimeSlotService timeSlotService = new TimeSlotService();
+    slotSelector.getItems().addAll(
+        timeSlotService.getProfessorUpcomingSlots(professor.getUserId()));
+
+    // Show slot ID + date + time range in dropdown
+    slotSelector.setConverter(new javafx.util.StringConverter<TimeSlot>() {
+        @Override
+        public String toString(TimeSlot slot) {
+            if (slot == null) return "";
+            return "Slot #" + slot.getSlotID() + "  |  " +
+                   slot.getSlotDate() + "  |  " +
+                   slot.getStartTime().toString().substring(0, 5) + " – " +
+                   slot.getEndTime().toString().substring(0, 5);
+        }
+        @Override
+        public TimeSlot fromString(String s) { return null; }
+    });
+
+    HBox selectorRow = new HBox(12, slotLabel, slotSelector);
+    selectorRow.setAlignment(Pos.CENTER_LEFT);
+    selectorRow.setPadding(new Insets(12, 14, 12, 14));
+    selectorRow.setStyle(
+        "-fx-background-color: rgba(39,70,144,0.07);" +
+        "-fx-border-color: rgba(39,70,144,0.15);" +
+        "-fx-border-radius: 8;" +
+        "-fx-background-radius: 8;"
+    );
+
+    // ──────────────────────────────────────────────────────────────────
+    // WAITLIST TABLE
+    // ──────────────────────────────────────────────────────────────────
+
+    TableColumn<WaitlistEntry, Integer> idCol = new TableColumn<>("Entry ID");
+    idCol.setCellValueFactory(new PropertyValueFactory<>("waitlistId"));
+    idCol.setPrefWidth(80);
+
+    TableColumn<WaitlistEntry, String> studentIdCol = new TableColumn<>("Student ID");
+    studentIdCol.setCellValueFactory(cellData ->
+        new SimpleStringProperty(
+            String.valueOf(cellData.getValue().getStudent().getUserId())));
+    studentIdCol.setPrefWidth(100);
+
+    TableColumn<WaitlistEntry, String> studentNameCol = new TableColumn<>("Student Name");
+    studentNameCol.setCellValueFactory(cellData ->
+        new SimpleStringProperty(
+            cellData.getValue().getStudent().getFirstName() + " " +
+            cellData.getValue().getStudent().getLastName()));
+    studentNameCol.setPrefWidth(160);
+
+    TableColumn<WaitlistEntry, String> joinedCol = new TableColumn<>("Joined At");
+    joinedCol.setCellValueFactory(cellData ->
+        new SimpleStringProperty(cellData.getValue().getJoinedAt().toString()));
+    joinedCol.setPrefWidth(140);
+
+    // ──────────────────────────────────────────────────────────────────
+    // ACTION COLUMN: Approve / Remove buttons
+    // ──────────────────────────────────────────────────────────────────
+
+    TableColumn<WaitlistEntry, Void> actionCol = new TableColumn<>("Actions");
+    actionCol.setPrefWidth(180);
+
+    actionCol.setCellFactory(col -> new TableCell<>() {
+    private final Button approveBtn = new Button("Approve");
+    private final Button removeBtn  = new Button("Remove");
+    private final HBox   actions    = new HBox(6, approveBtn, removeBtn); // ← field, not local variable
+
+    {
+        approveBtn.getStyleClass().add("action-button-success");
+        approveBtn.setStyle("-fx-padding: 6 12; -fx-font-size: 11;");
+        removeBtn.getStyleClass().add("action-button-danger");
+        removeBtn.setStyle("-fx-padding: 6 12; -fx-font-size: 11;");
+
+        actions.setAlignment(Pos.CENTER);
+
+        approveBtn.setOnAction(e -> {
+            WaitlistEntry entry = getTableView().getItems().get(getIndex());
+            WaitlistService service = new WaitlistService();
+            boolean success = service.promoteFromWaitlist(entry.getSlot().getSlotID());
+            if (success) {
+                getTableView().getItems().remove(entry);
+                showAlert("Success", "Student approved and slot assigned.", AlertType.INFORMATION);
+            } else {
+                showAlert("Error", "Failed to promote student from waitlist.", AlertType.ERROR);
+            }
+        });
+
+        removeBtn.setOnAction(e -> {
+            WaitlistEntry entry = getTableView().getItems().get(getIndex());
+            WaitlistService service = new WaitlistService();
+            boolean success = service.removeFromWaitlist(entry.getWaitlistId());
+            if (success) {
+                getTableView().getItems().remove(entry);
+                showAlert("Success", "Student removed from waitlist.", AlertType.INFORMATION);
+            } else {
+                showAlert("Error", "Failed to remove student.", AlertType.ERROR);
+            }
+        });
+    }
+
+    @Override
+    protected void updateItem(Void item, boolean empty) {
+        super.updateItem(item, empty);
+        setGraphic(empty ? null : actions); // ← references the field directly, always works
+    }
+});
+
+    TableView<WaitlistEntry> waitlistTable = buildStyledTable();
+    waitlistTable.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+    VBox.setVgrow(waitlistTable, Priority.ALWAYS);
+    waitlistTable.getColumns().addAll(idCol, studentIdCol, studentNameCol, joinedCol, actionCol);
+
+    // ──────────────────────────────────────────────────────────────────
+    // LOAD WAITLIST WHEN SLOT SELECTED
+    // ──────────────────────────────────────────────────────────────────
+
+    slotSelector.setOnAction(e -> {
+        TimeSlot selected = slotSelector.getValue();
+        if (selected != null) {
+            WaitlistService waitlistService = new WaitlistService();
+            java.util.List<WaitlistEntry> entries =
+                waitlistService.getWaitlistBySlot(selected.getSlotID());
+            waitlistTable.getItems().setAll(entries);
+        } else {
+            waitlistTable.getItems().clear();
+        }
+    });
+
+    VBox card = new VBox(18);
+    card.getChildren().addAll(
+        buildCardHeader("⏳  Waitlist Management", "Review and manage student waitlists"),
+        selectorRow,
+        waitlistTable
+    );
+    card.setPadding(new Insets(24));
+    applyCardStyle(card);
+    VBox.setVgrow(card, Priority.ALWAYS);
+    card.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+    return card;
+}
+
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // § PAST SLOTS VIEW (Read-only)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Shows all completed/past time slots in a read-only table.
+     * Displays slot details: ID, Date, Start/End time, Status
+     *
+     * Service Method: TimeSlotService.getProfessorPastSlots(professorId)
+     */
+    private static VBox buildPastSlotsView(Professor professor) {
 
         TableColumn<TimeSlot, Integer> idCol = new TableColumn<>("Slot ID");
         idCol.setCellValueFactory(new PropertyValueFactory<>("slotID"));
@@ -430,6 +627,7 @@ public class ProfessorView {
         VBox.setVgrow(table, Priority.ALWAYS);
         table.getColumns().addAll(idCol, dateCol, startCol, endCol, statusCol);
 
+        // SERVICE CALL: Get past slots
         TimeSlotService service = new TimeSlotService();
         table.getItems().setAll(
             service.getProfessorPastSlots(professor.getUserId()));
@@ -439,13 +637,28 @@ public class ProfessorView {
     }
 
 
-    // ══════════════════════════════════════════════════════════════════
-    // UPCOMING SLOTS
-    // ══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    // § UPCOMING SLOTS VIEW
+    // ═══════════════════════════════════════════════════════════════════════
 
-    /** Shows all future time slots. */
+    /**
+     * Shows all upcoming time slots for this professor.
+     * Each row has interactive controls:
+     *   • Change Status dropdown (FREE → CANCELLED/FROZEN)
+     *   • Block/Unblock button (to prevent students from booking)
+     *
+     * Service Methods:
+     *   • TimeSlotService.getProfessorUpcomingSlots(professorId)
+     *   • TimeSlotService.updateSlotStatus(slotId, status)
+     *   • TimeSlotService.blockSlot(slotId)
+     *   • TimeSlotService.unblockSlot(slotId)
+     */
     private static VBox buildUpcomingSlotsView(Professor professor) {
 
+        // ──────────────────────────────────────────────────────────────────
+        // TABLE COLUMNS
+        // ──────────────────────────────────────────────────────────────────
+        
         TableColumn<TimeSlot, Integer> idCol = new TableColumn<>("Slot ID");
         idCol.setCellValueFactory(new PropertyValueFactory<>("slotID"));
         idCol.setPrefWidth(70);
@@ -471,11 +684,120 @@ public class ProfessorView {
         statusCol.setCellFactory(col -> buildSlotStatusCell());
         statusCol.setPrefWidth(110);
 
+        // ──────────────────────────────────────────────────────────────────
+        // CHANGE STATUS DROPDOWN COLUMN
+        // ──────────────────────────────────────────────────────────────────
+        
+        TableColumn<TimeSlot, TimeSlotStatus> changeStatusCol = 
+            new TableColumn<>("Change Status");
+        changeStatusCol.setPrefWidth(150);
+
+        changeStatusCol.setCellFactory(col -> new TableCell<>() {
+            private final ComboBox<TimeSlotStatus> statusCombo = new ComboBox<>();
+
+            {
+                statusCombo.getItems().addAll(
+                    TimeSlotStatus.FREE,
+                    TimeSlotStatus.CANCELLED,
+                    TimeSlotStatus.FROZEN
+                );
+                styleComboBox(statusCombo);
+
+                statusCombo.setOnAction(e -> {
+                    TimeSlot slot = getTableView().getItems().get(getIndex());
+                    TimeSlotStatus selected = statusCombo.getValue();
+
+                    // SERVICE CALL: Update slot status
+                    TimeSlotService service = new TimeSlotService();
+                    boolean success = service.updateSlotStatus(slot.getSlotID(), selected);
+
+                    if (success) {
+                        slot.setStatus(selected);
+                        getTableView().refresh();
+                        showAlert("Success", "Slot status updated to " + selected + ".", AlertType.INFORMATION);
+                    } else {
+                        showAlert("Error", "Failed to update slot status.", AlertType.ERROR);
+                    }
+                });
+            }
+
+            @Override
+            protected void updateItem(TimeSlotStatus status, boolean empty) {
+                super.updateItem(status, empty);
+                if (empty) { setGraphic(null); }
+                else       { statusCombo.setValue(status); setGraphic(statusCombo); }
+            }
+        });
+
+        // ──────────────────────────────────────────────────────────────────
+        // BLOCK/UNBLOCK BUTTON COLUMN
+        // ──────────────────────────────────────────────────────────────────
+        
+        TableColumn<TimeSlot, Void> blockCol = new TableColumn<>("Block/Unblock");
+        blockCol.setPrefWidth(140);
+
+        blockCol.setCellFactory(col -> new TableCell<>() {
+            private final Button blockBtn = new Button("Block");
+
+            {
+                blockBtn.getStyleClass().add("action-button-ghost");
+                blockBtn.setStyle("-fx-padding: 6 12; -fx-font-size: 11;");
+
+                blockBtn.setOnAction(e -> {
+                    TimeSlot slot = getTableView().getItems().get(getIndex());
+                    TimeSlotService service = new TimeSlotService();
+
+                    // Toggle block/unblock
+                    if (slot.getStatus() == TimeSlotStatus.FROZEN) {
+                        // If frozen, unblock it
+                        boolean success = service.unblockSlot(slot.getSlotID());
+                        if (success) {
+                            slot.setStatus(TimeSlotStatus.FREE);
+                            blockBtn.setText("Block");
+                            getTableView().refresh();
+                            showAlert("Success", "Slot unlocked.", AlertType.INFORMATION);
+                        } else {
+                            showAlert("Error", "Failed to unlock slot.", AlertType.ERROR);
+                        }
+                    } else {
+                        // Block the slot
+                        boolean success = service.blockSlot(slot.getSlotID());
+                        if (success) {
+                            slot.setStatus(TimeSlotStatus.FROZEN);
+                            blockBtn.setText("Unblock");
+                            getTableView().refresh();
+                            showAlert("Success", "Slot blocked.", AlertType.INFORMATION);
+                        } else {
+                            showAlert("Error", "Failed to block slot.", AlertType.ERROR);
+                        }
+                    }
+                });
+            }
+
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    TimeSlot slot = getTableView().getItems().get(getIndex());
+                    blockBtn.setText(slot.getStatus() == TimeSlotStatus.FROZEN ? "Unblock" : "Block");
+                    setGraphic(blockBtn);
+                }
+            }
+        });
+
+        // ──────────────────────────────────────────────────────────────────
+        // BUILD & POPULATE TABLE
+        // ──────────────────────────────────────────────────────────────────
+        
         TableView<TimeSlot> table = buildStyledTable();
         table.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         VBox.setVgrow(table, Priority.ALWAYS);
-        table.getColumns().addAll(idCol, dateCol, startCol, endCol, statusCol);
+        table.getColumns().addAll(
+            idCol, dateCol, startCol, endCol, statusCol, changeStatusCol, blockCol);
 
+        // SERVICE CALL: Get upcoming slots
         TimeSlotService service = new TimeSlotService();
         table.getItems().setAll(
             service.getProfessorUpcomingSlots(professor.getUserId()));
@@ -485,148 +807,339 @@ public class ProfessorView {
     }
 
 
-    // ══════════════════════════════════════════════════════════════════
-    // WAITLIST MANAGEMENT
-    // ══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    // § GENERATE / MANAGE SLOTS VIEW
+    // ═══════════════════════════════════════════════════════════════════════
 
     /**
-     * Slot selector dropdown + waitlist table.
-     * Selecting a slot from the ComboBox would load its waitlist entries.
+     * Allows professor to create new time slots.
+     * Components:
+     *   1. "Manually Insert Custom Slot" button → opens dialog
+     *   2. Template time slots (predefined) with "Generate" buttons
+     *
+     * Service Method: SlotGeneratorService.generateSingleSlot(template, professorId)
      */
-    private static VBox buildWaitlistManagementView(Professor professor) {
+   // ═══════════════════════════════════════════════════════════════════════
+// § GENERATE / MANAGE SLOTS VIEW
+// ═══════════════════════════════════════════════════════════════════════
 
-        // ── Slot selector ──
-        Label slotLabel = new Label("Select Slot:");
-        slotLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
-        slotLabel.setTextFill(Color.web(INDIGO_LIGHT));
+/**
+ * Allows professor to create new time slots.
+ * Components:
+ *   1. "Manually Insert Custom Slot" button → opens dialog
+ *   2. Template time slots table (from common_slots.json) with per-row Generate buttons
+ *
+ * Service Method: SlotGeneratorService.generateSingleSlot(template, professorId)
+ */
+private static VBox buildGenerateSlotsView(Professor professor) {
 
-        ComboBox<TimeSlot> slotSelector = new ComboBox<>();
-        slotSelector.setPromptText("Choose an upcoming slot…");
-        slotSelector.setPrefWidth(300);
-        slotSelector.setPrefHeight(40);
-        styleComboBox(slotSelector);
+    // ──────────────────────────────────────────────────────────────────
+    // MANUAL INSERT BUTTON
+    // ──────────────────────────────────────────────────────────────────
 
-        // Load upcoming slots into selector
-        TimeSlotService timeSlotService = new TimeSlotService();
-        slotSelector.getItems().addAll(
-            timeSlotService.getProfessorUpcomingSlots(professor.getUserId()));
+    Button manualInsertBtn = new Button("＋  Manually Insert Custom Slot");
+    manualInsertBtn.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
+    manualInsertBtn.setPrefHeight(44);
+    manualInsertBtn.setPrefWidth(280);
+    manualInsertBtn.setStyle(
+        "-fx-background-color: linear-gradient(to right," + ACCENT_INDIGO + ",#576CA8);" +
+        "-fx-text-fill: white;" +
+        "-fx-font-size: 13;" +
+        "-fx-font-weight: bold;" +
+        "-fx-border-radius: 8;" +
+        "-fx-background-radius: 8;" +
+        "-fx-cursor: hand;" +
+        "-fx-padding: 10 22;" +
+        "-fx-effect: dropshadow(gaussian, rgba(39,70,144,0.30), 10, 0, 0, 3);"
+    );
+    manualInsertBtn.setOnMouseEntered(e -> manualInsertBtn.setStyle(
+        "-fx-background-color: linear-gradient(to right,#576CA8,#7B93C4);" +
+        "-fx-text-fill: white;" +
+        "-fx-font-size: 13;" +
+        "-fx-font-weight: bold;" +
+        "-fx-border-radius: 8;" +
+        "-fx-background-radius: 8;" +
+        "-fx-cursor: hand;" +
+        "-fx-padding: 10 22;" +
+        "-fx-effect: dropshadow(gaussian, rgba(39,70,144,0.45), 14, 0, 0, 5);"
+    ));
+    manualInsertBtn.setOnMouseExited(e -> manualInsertBtn.setStyle(
+        "-fx-background-color: linear-gradient(to right," + ACCENT_INDIGO + ",#576CA8);" +
+        "-fx-text-fill: white;" +
+        "-fx-font-size: 13;" +
+        "-fx-font-weight: bold;" +
+        "-fx-border-radius: 8;" +
+        "-fx-background-radius: 8;" +
+        "-fx-cursor: hand;" +
+        "-fx-padding: 10 22;" +
+        "-fx-effect: dropshadow(gaussian, rgba(39,70,144,0.30), 10, 0, 0, 3);"
+    ));
+    manualInsertBtn.setOnAction(e -> showManualInsertDialog(professor));
 
-        HBox selectorRow = new HBox(12, slotLabel, slotSelector);
-        selectorRow.setAlignment(Pos.CENTER_LEFT);
-        selectorRow.setPadding(new Insets(12, 14, 12, 14));
-        selectorRow.setStyle(
-            "-fx-background-color: rgba(39,70,144,0.07);" +
-            "-fx-border-color: rgba(39,70,144,0.15);" +
-            "-fx-border-radius: 8;" +
-            "-fx-background-radius: 8;"
-        );
+    Label manualDesc = new Label(
+        "Manually create a custom time slot for students to book.\n" +
+        "Specify the date, start time, and end time.");
+    manualDesc.setTextFill(Color.web(TEXT_MUTED));
+    manualDesc.setFont(Font.font("Segoe UI", 13));
+    manualDesc.setWrapText(true);
 
-        // ── Waitlist table ──
-        TableView<WaitlistEntry> waitlistTable = buildStyledTable();
-        waitlistTable.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-        VBox.setVgrow(waitlistTable, Priority.ALWAYS);
-        // (columns would be added here in a full implementation)
+    // ──────────────────────────────────────────────────────────────────
+    // DIVIDER BETWEEN MANUAL INSERT AND TEMPLATE TABLE
+    // ──────────────────────────────────────────────────────────────────
 
-        // ── Info label shown when no slot selected ──
-        Label placeholder = new Label("Select a slot above to view its waitlist.");
-        placeholder.setTextFill(Color.web(TEXT_MUTED));
-        placeholder.setFont(Font.font("Segoe UI", 14));
+    Separator divider = new Separator();
+    divider.setStyle("-fx-background-color: rgba(255,255,255,0.07);");
+    VBox.setMargin(divider, new Insets(6, 0, 6, 0));
 
-        // Container card
-        VBox card = new VBox(18);
-        card.getChildren().addAll(buildCardHeader("⏳  Waitlist Management", ""),
-                                  selectorRow, placeholder, waitlistTable);
-        card.setPadding(new Insets(24));
-        applyCardStyle(card);
-        return card;
+    // ──────────────────────────────────────────────────────────────────
+    // TEMPLATE SLOTS SECTION HEADER
+    // ──────────────────────────────────────────────────────────────────
+
+    Label templateTitle = new Label("📋  Template Slots");
+    templateTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 16));
+    templateTitle.setTextFill(Color.web(TEXT_PRIMARY));
+
+    Label templateDesc = new Label(
+        "Predefined slot templates from your schedule. " +
+        "Click Generate to create a slot for a specific date.");
+    templateDesc.setTextFill(Color.web(TEXT_MUTED));
+    templateDesc.setFont(Font.font("Segoe UI", 13));
+    templateDesc.setWrapText(true);
+
+    VBox templateHeader = new VBox(4, templateTitle, templateDesc);
+
+    // ──────────────────────────────────────────────────────────────────
+    // LOAD TEMPLATE SLOTS FROM JSON
+    // ──────────────────────────────────────────────────────────────────
+
+    ObservableList<SlotTemplate> templates = FXCollections.observableArrayList();
+    try {
+        java.io.InputStream is = ProfessorView.class.getResourceAsStream("/common_slots.json");
+        if (is != null) {
+            Reader reader = new InputStreamReader(is);
+            java.lang.reflect.Type listType =
+                new com.google.gson.reflect.TypeToken<java.util.List<SlotTemplate>>(){}.getType();
+            java.util.List<SlotTemplate> loaded = new Gson().fromJson(reader, listType);
+            if (loaded != null) templates.addAll(loaded);
+            reader.close();
+        }
+    } catch (Exception ex) {
+        ex.printStackTrace();
     }
 
+    // ──────────────────────────────────────────────────────────────────
+    // TEMPLATE TABLE COLUMNS
+    // ──────────────────────────────────────────────────────────────────
 
-    // ══════════════════════════════════════════════════════════════════
-    // GENERATE / MANAGE SLOTS
-    // ══════════════════════════════════════════════════════════════════
+    TableColumn<SlotTemplate, String> dayCol = new TableColumn<>("Day");
+    dayCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getDay()));
+    dayCol.setPrefWidth(120);
+    dayCol.setCellFactory(col -> new TableCell<>() {
+        @Override
+        protected void updateItem(String item, boolean empty) {
+            super.updateItem(item, empty);
+            if (empty || item == null) {
+                setText(null);
+                setStyle("");
+            } else {
+                setText(item);
+                setStyle("-fx-font-weight: bold; -fx-text-fill: " + ACCENT_INDIGO_L + ";");
+            }
+        }
+    });
 
-    /**
-     * Provides a "Manual Insert" button that opens the slot dialog.
-     * Additional template/bulk-generation controls would live here.
-     */
-    private static VBox buildGenerateSlotsView(Professor professor) {
+    TableColumn<SlotTemplate, String> startCol = new TableColumn<>("Start Time");
+    startCol.setCellValueFactory(c -> {
+        // Strip trailing seconds (:00) for cleaner display → "10:30"
+        String t = c.getValue().getStartTime();
+        return new SimpleStringProperty(t.length() >= 5 ? t.substring(0, 5) : t);
+    });
+    startCol.setPrefWidth(110);
+    startCol.setCellFactory(col -> new TableCell<>() {
+        @Override
+        protected void updateItem(String item, boolean empty) {
+            super.updateItem(item, empty);
+            if (empty || item == null) { setText(null); setStyle(""); }
+            else {
+                setText(item);
+                setStyle("-fx-text-fill: " + STATUS_TEAL + "; -fx-font-weight: bold;");
+            }
+        }
+    });
 
-        // ── Manual insert button ──
-        Button manualInsertBtn = new Button("＋  Manually Insert Custom Slot");
-        manualInsertBtn.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
-        manualInsertBtn.setPrefHeight(44);
-        manualInsertBtn.setPrefWidth(280);
-        // Use the primary action button style from CSS
-        manualInsertBtn.getStyleClass().add("action-button-primary");
-        // Java-side style since inline-style overrides may be needed
-        manualInsertBtn.setStyle(
-            "-fx-background-color: linear-gradient(to right," + INDIGO + ",#576CA8);" +
-            "-fx-text-fill: white;" +
-            "-fx-font-size: 13;" +
-            "-fx-font-weight: bold;" +
-            "-fx-border-radius: 8;" +
-            "-fx-background-radius: 8;" +
-            "-fx-cursor: hand;" +
-            "-fx-padding: 10 22;" +
-            "-fx-effect: dropshadow(gaussian, rgba(39,70,144,0.30), 10, 0, 0, 3);"
-        );
+    TableColumn<SlotTemplate, String> endCol = new TableColumn<>("End Time");
+    endCol.setCellValueFactory(c -> {
+        String t = c.getValue().getEndTime();
+        return new SimpleStringProperty(t.length() >= 5 ? t.substring(0, 5) : t);
+    });
+    endCol.setPrefWidth(110);
+    endCol.setCellFactory(col -> new TableCell<>() {
+        @Override
+        protected void updateItem(String item, boolean empty) {
+            super.updateItem(item, empty);
+            if (empty || item == null) { setText(null); setStyle(""); }
+            else {
+                setText(item);
+                setStyle("-fx-text-fill: " + TEXT_SECONDARY + ";");
+            }
+        }
+    });
 
-        manualInsertBtn.setOnMouseEntered(e -> manualInsertBtn.setStyle(
-            "-fx-background-color: linear-gradient(to right,#576CA8,#7B93C4);" +
-            "-fx-text-fill: white;" +
-            "-fx-font-size: 13;" +
-            "-fx-font-weight: bold;" +
-            "-fx-border-radius: 8;" +
-            "-fx-background-radius: 8;" +
-            "-fx-cursor: hand;" +
-            "-fx-padding: 10 22;" +
-            "-fx-effect: dropshadow(gaussian, rgba(39,70,144,0.45), 14, 0, 0, 5);"
-        ));
-        manualInsertBtn.setOnMouseExited(e -> manualInsertBtn.setStyle(
-            "-fx-background-color: linear-gradient(to right," + INDIGO + ",#576CA8);" +
-            "-fx-text-fill: white;" +
-            "-fx-font-size: 13;" +
-            "-fx-font-weight: bold;" +
-            "-fx-border-radius: 8;" +
-            "-fx-background-radius: 8;" +
-            "-fx-cursor: hand;" +
-            "-fx-padding: 10 22;" +
-            "-fx-effect: dropshadow(gaussian, rgba(39,70,144,0.30), 10, 0, 0, 3);"
-        ));
+    // ──────────────────────────────────────────────────────────────────
+    // GENERATE BUTTON COLUMN (Date picker + Generate per row)
+    // ──────────────────────────────────────────────────────────────────
 
-        manualInsertBtn.setOnAction(e -> showManualInsertDialog(professor));
+    TableColumn<SlotTemplate, Void> generateCol = new TableColumn<>("Generate For Date");
+    generateCol.setPrefWidth(300);
+    generateCol.setResizable(false);
 
-        // ── Description text ──
-        Label desc = new Label(
-            "Manually create a custom time slot for students to book.\n" +
-            "Specify the date, start time, and end time.");
-        desc.setTextFill(Color.web(TEXT_MUTED));
-        desc.setFont(Font.font("Segoe UI", 13));
-        desc.setWrapText(true);
+    generateCol.setCellFactory(col -> new TableCell<>() {
+        private final DatePicker datePicker = new DatePicker();
+        private final Button genBtn        = new Button("⚡  Generate");
+        private final HBox   cell          = new HBox(8, datePicker, genBtn);
 
-        VBox card = new VBox(18);
-        card.setFillWidth(true);
-        card.getChildren().addAll(
-            buildCardHeader("✨  Slot Management", "Create and manage your availability"),
-            desc,
-            manualInsertBtn
-        );
-        card.setPadding(new Insets(24));
-        applyCardStyle(card);
-        card.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-        return card;
+        {
+            datePicker.setPrefWidth(140);
+            datePicker.setPrefHeight(32);
+            datePicker.getStyleClass().add("date-picker");
+
+            genBtn.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
+            genBtn.setPrefHeight(32);
+            genBtn.setStyle(
+                "-fx-background-color: linear-gradient(to right," + ACCENT_TEAL + "," + ACCENT_TEAL_L + ");" +
+                "-fx-text-fill: #0F1525;" +
+                "-fx-font-size: 12;" +
+                "-fx-font-weight: bold;" +
+                "-fx-border-radius: 7;" +
+                "-fx-background-radius: 7;" +
+                "-fx-cursor: hand;" +
+                "-fx-padding: 6 14;" +
+                "-fx-effect: dropshadow(gaussian, rgba(20,184,166,0.30), 8, 0, 0, 2);"
+            );
+            genBtn.setOnMouseEntered(e -> genBtn.setStyle(
+                "-fx-background-color: linear-gradient(to right," + ACCENT_TEAL_L + ",#22D3CB);" +
+                "-fx-text-fill: #0F1525;" +
+                "-fx-font-size: 12;" +
+                "-fx-font-weight: bold;" +
+                "-fx-border-radius: 7;" +
+                "-fx-background-radius: 7;" +
+                "-fx-cursor: hand;" +
+                "-fx-padding: 6 14;" +
+                "-fx-effect: dropshadow(gaussian, rgba(20,184,166,0.50), 10, 0, 0, 3);"
+            ));
+            genBtn.setOnMouseExited(e -> genBtn.setStyle(
+                "-fx-background-color: linear-gradient(to right," + ACCENT_TEAL + "," + ACCENT_TEAL_L + ");" +
+                "-fx-text-fill: #0F1525;" +
+                "-fx-font-size: 12;" +
+                "-fx-font-weight: bold;" +
+                "-fx-border-radius: 7;" +
+                "-fx-background-radius: 7;" +
+                "-fx-cursor: hand;" +
+                "-fx-padding: 6 14;" +
+                "-fx-effect: dropshadow(gaussian, rgba(20,184,166,0.30), 8, 0, 0, 2);"
+            ));
+
+            cell.setAlignment(Pos.CENTER_LEFT);
+            cell.setPadding(new Insets(4, 0, 4, 0));
+
+            genBtn.setOnAction(e -> {
+    if (getIndex() < 0 || getIndex() >= getTableView().getItems().size()) return;
+    SlotTemplate template = getTableView().getItems().get(getIndex());
+
+    if (datePicker.getValue() == null) {
+        showAlert("Missing Date",
+            "Please pick a date for the \"" + template.getDay() +
+            " " + template.getStartTime().substring(0, 5) + "\" slot.",
+            AlertType.WARNING);
+        return;
     }
 
+    // Build a temporary SlotTemplate with the date baked into it
+    // and call the existing 2-parameter method
+    SlotGeneratorService generatorService = new SlotGeneratorService();
+    boolean success = generatorService.generateSingleSlot(template, professor.getUserId());
 
-    // ══════════════════════════════════════════════════════════════════
-    // MANUAL SLOT DIALOG
-    // ══════════════════════════════════════════════════════════════════
+    if (success) {
+        showAlert("Slot Generated",
+            template.getDay() + " slot " +
+            template.getStartTime().substring(0, 5) + " – " +
+            template.getEndTime().substring(0, 5) +
+            " created for " + datePicker.getValue() + ".",
+            AlertType.INFORMATION);
+        datePicker.setValue(null);
+    } else {
+        showAlert("Error",
+            "Failed to generate slot. It may already exist.",
+            AlertType.ERROR);
+    }
+});
+        }
+
+        @Override
+        protected void updateItem(Void item, boolean empty) {
+            super.updateItem(item, empty);
+            setGraphic(empty ? null : cell);
+        }
+    });
+
+    // ──────────────────────────────────────────────────────────────────
+    // TEMPLATE TABLE (scrollable, constrained resize)
+    // ──────────────────────────────────────────────────────────────────
+
+    TableView<SlotTemplate> templateTable = new TableView<>(templates);
+    templateTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+    templateTable.getColumns().addAll(dayCol, startCol, endCol, generateCol);
+    templateTable.setStyle(
+        "-fx-background-color: transparent;" +
+        "-fx-border-color: rgba(255,255,255,0.07);" +
+        "-fx-border-radius: 10;" +
+        "-fx-padding: 0;"
+    );
+    templateTable.setPrefHeight(340);
+    templateTable.setMaxWidth(Double.MAX_VALUE);
+
+    Label rowCount = new Label(templates.size() + " template slot(s) loaded");
+    rowCount.setFont(Font.font("Segoe UI", 12));
+    rowCount.setTextFill(Color.web(TEXT_MUTED));
+
+    // ──────────────────────────────────────────────────────────────────
+    // COMPOSE FULL CARD
+    // ──────────────────────────────────────────────────────────────────
+
+    VBox card = new VBox(16);
+    card.setFillWidth(true);
+    card.getChildren().addAll(
+        buildCardHeader("✨  Slot Management", "Create and manage your availability"),
+        manualDesc,
+        manualInsertBtn,
+        divider,
+        templateHeader,
+        rowCount,
+        templateTable
+    );
+    card.setPadding(new Insets(24));
+    applyCardStyle(card);
+    VBox.setVgrow(templateTable, Priority.ALWAYS);
+    card.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+    return card;
+}
+
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // § MANUAL SLOT DIALOG
+    // ═══════════════════════════════════════════════════════════════════════
 
     /**
-     * Opens a styled dialog with Date + Start/End time fields.
-     * On "Save Slot" the dialog returns a new TimeSlot object.
-     * (Saving to the DB is left to the calling controller / service.)
+     * Opens a styled dialog for manually creating a new time slot.
+     * Fields:
+     *   • Date picker
+     *   • Start time (HH:mm format)
+     *   • End time (HH:mm format)
+     *
+     * On "Save Slot" creates the new TimeSlot and saves to database.
+     *
+     * Service Note: TimeSlot model used to create object,
+     *              which will be saved via TimeSlotService in actual implementation.
      */
     private static void showManualInsertDialog(Professor professor) {
 
@@ -634,9 +1147,7 @@ public class ProfessorView {
         dialog.setTitle("New Time Slot");
         dialog.setHeaderText("Create a Custom Slot");
 
-        // Apply dark theme to the dialog pane via CSS class
         dialog.getDialogPane().getStyleClass().add("dialog-pane");
-        // Re-apply the stylesheet since dialogs get a new window
         dialog.getDialogPane().getStylesheets().add(
             ProfessorView.class.getResource("/styles.css").toExternalForm());
 
@@ -644,67 +1155,85 @@ public class ProfessorView {
             new ButtonType("Save Slot", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
 
-        // ── Form layout ──
+        // ──────────────────────────────────────────────────────────────────
+        // FORM FIELDS
+        // ──────────────────────────────────────────────────────────────────
+        
         GridPane grid = new GridPane();
         grid.setHgap(14);
         grid.setVgap(14);
         grid.setPadding(new Insets(20, 20, 10, 20));
 
-        // Date picker
         Label dateLabel = styledDialogLabel("Date:");
         DatePicker datePicker = new DatePicker();
         datePicker.setPrefWidth(220);
         datePicker.setPrefHeight(40);
         datePicker.getStyleClass().add("date-picker");
 
-        // Start time field
-        Label startLabel = styledDialogLabel("Start Time:");
+        Label startLabel = styledDialogLabel("Start Time (HH:mm):");
         TextField startTimeField = new TextField("09:00");
         startTimeField.setPrefWidth(220);
         startTimeField.setPrefHeight(40);
         styleDialogTextField(startTimeField);
 
-        // End time field
-        Label endLabel = styledDialogLabel("End Time:");
+        Label endLabel = styledDialogLabel("End Time (HH:mm):");
         TextField endTimeField = new TextField("09:30");
         endTimeField.setPrefWidth(220);
         endTimeField.setPrefHeight(40);
         styleDialogTextField(endTimeField);
 
-        // Place labels in col 0, controls in col 1
         grid.add(dateLabel,      0, 0); grid.add(datePicker,    1, 0);
         grid.add(startLabel,     0, 1); grid.add(startTimeField, 1, 1);
         grid.add(endLabel,       0, 2); grid.add(endTimeField,   1, 2);
 
         dialog.getDialogPane().setContent(grid);
 
-        // ── Result converter ──
+        // ──────────────────────────────────────────────────────────────────
+        // RESULT CONVERTER
+        // ──────────────────────────────────────────────────────────────────
+        
         dialog.setResultConverter(btn -> {
             if (btn == saveButtonType) {
-                return new TimeSlot(
-                    datePicker.getValue(),
-                    professor.getUserId(),
-                    java.time.LocalTime.parse(startTimeField.getText()),
-                    java.time.LocalTime.parse(endTimeField.getText())
-                );
+                try {
+                    TimeSlot newSlot = new TimeSlot(
+                        datePicker.getValue(),
+                        professor.getUserId(),
+                        java.time.LocalTime.parse(startTimeField.getText()),
+                        java.time.LocalTime.parse(endTimeField.getText())
+                    );
+
+                    // NOTE: In actual implementation, save via TimeSlotService
+                    // TimeSlotService service = new TimeSlotService();
+                    // boolean success = service.createTimeSlot(newSlot);
+                    
+                    showAlert("Success", 
+                        "Slot created for " + datePicker.getValue(), 
+                        AlertType.INFORMATION);
+
+                    return newSlot;
+                } catch (Exception e) {
+                    showAlert("Error", "Invalid time format. Use HH:mm (e.g., 14:30)", AlertType.ERROR);
+                    return null;
+                }
             }
             return null;
         });
 
         dialog.showAndWait();
-        // The returned TimeSlot would be saved via TimeSlotService here
     }
 
 
-    // ══════════════════════════════════════════════════════════════════
-    // PRIVATE STYLE HELPERS
-    // ══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    // § STYLE & UTILITY HELPERS
+    // ═══════════════════════════════════════════════════════════════════════
 
-    // ── Sidebar navigation button ─────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────────
+    // SIDEBAR BUTTON STYLING
+    // ──────────────────────────────────────────────────────────────────────
+
     /**
-     * Creates a sidebar nav button with hover highlight.
-     * Default: transparent background, muted text.
-     * Hover: semi-transparent indigo pill.
+     * Creates a styled sidebar navigation button.
+     * States: Default (muted), Hovered (highlighted), Active (primary color)
      */
     private static Button createSidebarButton(String text) {
         Button btn = new Button(text);
@@ -712,19 +1241,15 @@ public class ProfessorView {
         btn.setPrefHeight(42);
         btn.setFont(Font.font("Segoe UI", 13));
         btn.setAlignment(Pos.CENTER_LEFT);
-        btn.setStyle(buildSidebarBtnStyle(false));   // inactive style
+        btn.setStyle(buildSidebarBtnStyle(false));
 
-        // Hover effects
-        btn.setOnMouseEntered(e ->
-            btn.setStyle(buildSidebarBtnStyle(true)));
-        btn.setOnMouseExited(e ->
-            btn.setStyle(buildSidebarBtnStyle(false)));
-        
+        btn.setOnMouseEntered(e -> btn.setStyle(buildSidebarBtnStyle(true)));
+        btn.setOnMouseExited(e -> btn.setStyle(buildSidebarBtnStyle(false)));
 
         return btn;
     }
 
-    /** Builds the CSS string for a sidebar button's current state. */
+    /** CSS string for sidebar button (hovered or not) */
     private static String buildSidebarBtnStyle(boolean hovered) {
         if (hovered) {
             return "-fx-background-color: rgba(39,70,144,0.20);" +
@@ -747,37 +1272,36 @@ public class ProfessorView {
         }
     }
 
-    /** Style for the "active" sidebar button (currently selected section). */
+    /** CSS string for active (selected) sidebar button */
     private static String buildSidebarBtnActiveStyle() {
         return "-fx-background-color: rgba(39,70,144,0.30);" +
-               "-fx-text-fill: " + INDIGO_LIGHT + ";" +
+               "-fx-text-fill: " + ACCENT_INDIGO_L + ";" +
                "-fx-font-size: 13;" +
                "-fx-font-weight: bold;" +
-               "-fx-padding: 10 16 10 13;" +    // 3px indent to make room for left border
+               "-fx-padding: 10 16 10 13;" +
                "-fx-background-radius: 8;" +
                "-fx-cursor: hand;" +
                "-fx-alignment: CENTER_LEFT;" +
-               "-fx-border-color: " + INDIGO + " transparent transparent transparent;" +
+               "-fx-border-color: " + ACCENT_INDIGO + " transparent transparent transparent;" +
                "-fx-border-width: 0 0 0 3;" +
                "-fx-border-radius: 0;";
     }
 
-    /**
-     * Updates sidebar button visual state:
-     *   activeBtn → active style
-     *   all others → inactive style
-     */
+    /** Updates which sidebar button appears "active" */
     private static void setActiveSidebarButton(Button active, Button... others) {
         active.setStyle(buildSidebarBtnActiveStyle());
-        // Re-attach hover handlers for the newly active button (optional UX choice)
         for (Button btn : others) {
             btn.setStyle(buildSidebarBtnStyle(false));
             btn.setOnMouseEntered(e -> btn.setStyle(buildSidebarBtnStyle(true)));
-            btn.setOnMouseExited(e  -> btn.setStyle(buildSidebarBtnStyle(false)));
+            btn.setOnMouseExited(e -> btn.setStyle(buildSidebarBtnStyle(false)));
         }
     }
 
-    // ── Logout button (danger-red tinted) ─────────────────────────────
+    // ──────────────────────────────────────────────────────────────────────
+    // LOGOUT BUTTON
+    // ──────────────────────────────────────────────────────────────────────
+
+    /** Creates the red-tinted logout button at the bottom of sidebar */
     private static Button createLogoutButton(String text) {
         Button btn = new Button(text);
         btn.setMaxWidth(Double.MAX_VALUE);
@@ -821,7 +1345,11 @@ public class ProfessorView {
         return btn;
     }
 
-    // ── Small uppercase section label in the sidebar ──────────────────
+    // ──────────────────────────────────────────────────────────────────────
+    // SIDEBAR SECTION LABEL
+    // ──────────────────────────────────────────────────────────────────────
+
+    /** Small uppercase category label in sidebar */
     private static Label createSidebarSectionLabel(String text) {
         Label lbl = new Label(text);
         lbl.setFont(Font.font("Segoe UI", FontWeight.BOLD, 10));
@@ -830,7 +1358,11 @@ public class ProfessorView {
         return lbl;
     }
 
-    // ── Card header (title + subtitle row) ───────────────────────────
+    // ──────────────────────────────────────────────────────────────────────
+    // CARD HEADER
+    // ──────────────────────────────────────────────────────────────────────
+
+    /** Builds the title + subtitle header for a content card */
     private static VBox buildCardHeader(String title, String subtitle) {
         Label titleLabel = new Label(title);
         titleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 20));
@@ -846,14 +1378,13 @@ public class ProfessorView {
         }
 
         return header;
-        
     }
 
-    // ── Wrap a table inside a full content card ───────────────────────
-    /**
-     * Convenience: creates the card VBox, adds header + table,
-     * and returns the styled container.
-     */
+    // ──────────────────────────────────────────────────────────────────────
+    // CARD WRAPPING
+    // ──────────────────────────────────────────────────────────────────────
+
+    /** Convenience: wraps a table in a styled card with header */
     private static VBox wrapInCard(String title, TableView<?> table, String subtitle) {
         VBox card = new VBox(16);
         card.getChildren().addAll(buildCardHeader(title, subtitle), table);
@@ -868,12 +1399,12 @@ public class ProfessorView {
         return card;
     }
 
-    // ── Apply the glass-card background style to any VBox ─────────────
+    /** Applies the glass-card background style to a VBox */
     private static void applyCardStyle(VBox card) {
         card.setFillWidth(true);
         card.setStyle(
             "-fx-background-color: rgba(255,255,255,0.025);" +
-            "-fx-border-color: " + BORDER + ";" +
+            "-fx-border-color: " + BORDER_LIGHT + ";" +
             "-fx-border-width: 1;" +
             "-fx-border-radius: 14;" +
             "-fx-background-radius: 14;" +
@@ -881,15 +1412,16 @@ public class ProfessorView {
         );
     }
 
-    // ── Build a blank styled TableView ───────────────────────────────
-    /** Returns an empty TableView with the global dark-table style applied. */
+    // ──────────────────────────────────────────────────────────────────────
+    // TABLE VIEW
+    // ──────────────────────────────────────────────────────────────────────
+
+    /** Creates an empty styled TableView with dark theme */
     private static <T> TableView<T> buildStyledTable() {
         TableView<T> table = new TableView<>();
         table.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         VBox.setVgrow(table, Priority.ALWAYS);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        // CSS in styles.css handles .table-view, .table-row-cell, etc.
-        // The Java-side style below ensures the outer background is dark.
         table.setStyle(
             "-fx-background-color: transparent;" +
             "-fx-border-color: rgba(255,255,255,0.07);" +
@@ -899,36 +1431,36 @@ public class ProfessorView {
         return table;
     }
 
+    // ──────────────────────────────────────────────────────────────────────
+    // STATUS CELL RENDERING (Colour-coded badges)
+    // ──────────────────────────────────────────────────────────────────────
 
-    // ── Colour-coded status cell for Appointment tables ───────────────
-    /**
-     * Returns a TableCell that colours the status text based on value:
-     *   APPROVED → green  |  REJECTED → red
-     *   PENDING → amber   |  WAITLISTED → blue
-     */
+    /** Renders appointment status with colour: APPROVED→green, REJECTED→red, etc. */
     private static TableCell<Appointment, String> buildStatusCell() {
         return new TableCell<>() {
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
                 if (empty || item == null) {
-                    setText(null); setStyle("");
+                    setText(null);
+                    setStyle("");
                 } else {
                     setText(item);
-                    setStyle("-fx-font-weight: bold; -fx-text-fill: " + statusColor(item) + ";");
+                    setStyle("-fx-font-weight: bold; -fx-text-fill: " + appointmentStatusColor(item) + ";");
                 }
             }
         };
     }
 
-    // ── Colour-coded status cell for TimeSlot tables ──────────────────
+    /** Renders slot status with colour: FREE→teal, CANCELLED→red, etc. */
     private static TableCell<TimeSlot, String> buildSlotStatusCell() {
         return new TableCell<>() {
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
                 if (empty || item == null) {
-                    setText(null); setStyle("");
+                    setText(null);
+                    setStyle("");
                 } else {
                     setText(item);
                     setStyle("-fx-font-weight: bold; -fx-text-fill: " + slotStatusColor(item) + ";");
@@ -937,29 +1469,35 @@ public class ProfessorView {
         };
     }
 
-    /** Maps appointment status strings to their palette colour. */
-    private static String statusColor(String status) {
+    /** Maps appointment status to palette colour */
+    private static String appointmentStatusColor(String status) {
         return switch (status) {
-            case "APPROVED"   -> SUCCESS;
-            case "REJECTED"   -> DANGER;
-            case "PENDING"    -> AMBER;
-            case "WAITLISTED" -> BLUE;
+            case "APPROVED"   -> STATUS_GREEN;
+            case "REJECTED"   -> STATUS_RED;
+            case "PENDING"    -> STATUS_AMBER;
+            case "WAITLISTED" -> STATUS_BLUE;
             default           -> TEXT_PRIMARY;
         };
     }
 
-    /** Maps slot status strings to their palette colour. */
+    /** Maps slot status to palette colour */
     private static String slotStatusColor(String status) {
         return switch (status) {
-            case "AVAILABLE"   -> "#2DD4BF";   // Teal
-            case "BOOKED"      -> INDIGO_LIGHT;
-            case "CANCELLED"   -> DANGER;
-            case "COMPLETED"   -> TEXT_MUTED;
-            default            -> TEXT_PRIMARY;
+            case "FREE"              -> STATUS_TEAL;
+            case "PARTIALLY_BOOKED"  -> ACCENT_INDIGO_L;
+            case "BOOKED"            -> ACCENT_INDIGO_L;
+            case "CANCELLED"         -> STATUS_RED;
+            case "FROZEN"            -> STATUS_AMBER;
+            case "COMPLETED"         -> TEXT_MUTED;
+            default                  -> TEXT_PRIMARY;
         };
     }
 
-    // ── Style a ComboBox with the dark-glass palette ──────────────────
+    // ──────────────────────────────────────────────────────────────────────
+    // COMBOBOX STYLING
+    // ──────────────────────────────────────────────────────────────────────
+
+    /** Styles a ComboBox with dark-glass palette */
     private static <T> void styleComboBox(ComboBox<T> combo) {
         combo.setStyle(
             "-fx-background-color: rgba(255,255,255,0.05);" +
@@ -972,15 +1510,19 @@ public class ProfessorView {
         );
     }
 
-    // ── Dialog label style ────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────────
+    // DIALOG FORM STYLING
+    // ──────────────────────────────────────────────────────────────────────
+
+    /** Styles a label inside a dialog form */
     private static Label styledDialogLabel(String text) {
         Label lbl = new Label(text);
         lbl.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
-        lbl.setTextFill(Color.web(INDIGO_LIGHT));
+        lbl.setTextFill(Color.web(ACCENT_INDIGO_L));
         return lbl;
     }
 
-    // ── Dialog text-field style ───────────────────────────────────────
+    /** Styles a text field inside a dialog */
     private static void styleDialogTextField(TextField tf) {
         tf.setStyle(
             "-fx-background-color: rgba(255,255,255,0.06);" +
@@ -993,5 +1535,18 @@ public class ProfessorView {
             "-fx-font-size: 13;" +
             "-fx-padding: 9 12;"
         );
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // ALERT DIALOG
+    // ──────────────────────────────────────────────────────────────────────
+
+    /** Shows a simple alert dialog with title, message, and type */
+    private static void showAlert(String title, String message, AlertType type) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 }

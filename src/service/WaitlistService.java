@@ -1,5 +1,8 @@
 package service;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 import dao.AppointmentDAO;
 import dao.TimeSlotDAO;
 import dao.UserDAO;
@@ -10,9 +13,6 @@ import model.Student;
 import model.TimeSlot;
 import model.WaitlistEntry;
 import priority.PriorityCalculator;
-
-import java.time.LocalDateTime;
-import java.util.List;
 
 public class WaitlistService {
 
@@ -30,13 +30,11 @@ public class WaitlistService {
 
     // Add student to waitlist (called by professor to waitlist a pending appointment)
     public boolean addToWaitlist(int appointmentId) {
-        // Get the appointment
         Appointment appointment = appointmentDAO.getAppointmentById(appointmentId);
         if (appointment == null || appointment.getStatus() != AppointmentStatus.PENDING) {
-            return false; // Only pending appointments can be waitlisted
+            return false;
         }
 
-        // Get student and slot
         Student student = (Student) userDAO.getUserById(appointment.getStudentId());
         TimeSlot slot = timeSlotDAO.getSlotById(appointment.getSlotId());
 
@@ -46,40 +44,37 @@ public class WaitlistService {
 
         int priorityScore = PriorityCalculator.calculatePriorityScore(appointment, student);
 
-        // Update appointment status to WAITLISTED
-        boolean statusUpdated = appointmentDAO.updateAppointmentStatus(appointmentId, AppointmentStatus.WAITLISTED);
+        boolean statusUpdated = appointmentDAO.updateAppointmentStatus(
+            appointmentId, AppointmentStatus.WAITLISTED);
         if (!statusUpdated) {
             return false;
         }
 
-        // Create WaitlistEntry
         WaitlistEntry entry = new WaitlistEntry(
-                0, // waitlistId will be generated
-                student,
-                slot,
-                priorityScore,
-                LocalDateTime.now()
+            0,
+            student,
+            slot,
+            priorityScore,
+            LocalDateTime.now()
         );
 
-        // Add to DAO
         return waitlistDAO.addToWaitlist(entry);
     }
 
     // Remove student from waitlist (by professor)
     public boolean removeFromWaitlist(int waitlistId) {
-        // Get the waitlist entry to find student and slot
         WaitlistEntry entry = waitlistDAO.getWaitlistEntryById(waitlistId);
         if (entry == null) {
             return false;
         }
 
-        // Find the appointment and set status to CANCELLED
-        Appointment appointment = appointmentDAO.getAppointmentByStudentAndSlot(entry.getStudent().getUserId(), entry.getSlot().getSlotID());
+        Appointment appointment = appointmentDAO.getAppointmentByStudentAndSlot(
+            entry.getStudent().getUserId(), entry.getSlot().getSlotID());
         if (appointment != null) {
-            appointmentDAO.updateAppointmentStatus(appointment.getAppointmentId(), AppointmentStatus.CANCELLED);
+            appointmentDAO.updateAppointmentStatus(
+                appointment.getAppointmentId(), AppointmentStatus.CANCELLED);
         }
 
-        // Remove from waitlist
         return waitlistDAO.removeFromWaitlist(waitlistId);
     }
 
@@ -87,23 +82,53 @@ public class WaitlistService {
     public void handleAppointmentCancellation(int appointmentId) {
         Appointment appointment = appointmentDAO.getAppointmentById(appointmentId);
         if (appointment != null && appointment.getStatus() == AppointmentStatus.WAITLISTED) {
-            // Remove from waitlist
-            waitlistDAO.removeByStudentAndSlot(appointment.getStudentId(), appointment.getSlotId());
+            waitlistDAO.removeByStudentAndSlot(
+                appointment.getStudentId(), appointment.getSlotId());
         }
     }
 
-    // Promote highest priority student from waitlist to approved when an approved appointment is cancelled
-    public void promoteFromWaitlist(int slotId) {
-        WaitlistEntry highest = waitlistDAO.getHighestPriorityStudent(slotId);
-        if (highest != null) {
-            // Find the appointment for this student and slot
-            Appointment appointment = appointmentDAO.getAppointmentByStudentAndSlot(highest.getStudent().getUserId(), slotId);
-            if (appointment != null && appointment.getStatus() == AppointmentStatus.WAITLISTED) {
-                // Update to APPROVED
-                appointmentDAO.updateAppointmentStatus(appointment.getAppointmentId(), AppointmentStatus.APPROVED);
-                // Remove from waitlist
-                waitlistDAO.removeFromWaitlist(highest.getWaitlistId());
+    // Promote highest priority student from waitlist to approved
+    public boolean promoteFromWaitlist(int slotId) {
+        try {
+            WaitlistEntry highest = waitlistDAO.getHighestPriorityStudent(slotId);
+            if (highest == null) {
+                System.out.println("PROMOTE: no students on waitlist for slot " + slotId);
+                return false;
             }
+
+            int studentId = highest.getStudent().getUserId();
+            int waitlistId = highest.getWaitlistId();
+            System.out.println("PROMOTE: student=" + studentId + " waitlistId=" + waitlistId);
+
+            Appointment appointment = appointmentDAO
+                .getAppointmentByStudentAndSlot(studentId, slotId);
+            System.out.println("PROMOTE: appointment=" + (appointment != null
+                ? "ID=" + appointment.getAppointmentId() + " status=" + appointment.getStatus()
+                : "null"));
+
+            if (appointment != null) {
+                boolean updated = appointmentDAO.updateAppointmentStatus(
+                    appointment.getAppointmentId(), AppointmentStatus.APPROVED);
+                System.out.println("PROMOTE: updateAppointmentStatus=" + updated);
+                if (!updated) {
+                    System.out.println("PROMOTE FAILED: could not approve appointment");
+                    return false;
+                }
+            }
+
+            boolean removed = waitlistDAO.removeFromWaitlist(waitlistId);
+            System.out.println("PROMOTE: removeFromWaitlist=" + removed);
+            if (!removed) {
+                System.out.println("PROMOTE FAILED: could not remove from waitlist");
+                return false;
+            }
+
+            System.out.println("PROMOTE: success");
+            return true;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
         }
     }
 

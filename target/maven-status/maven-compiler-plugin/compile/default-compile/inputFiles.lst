@@ -1,29 +1,31 @@
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\dao\AppointmentDAO.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\dao\DBConnection.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\dao\TimeSlotDAO.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\dao\TimetableDAO.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\dao\UserDAO.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\dao\WaitlistDAO.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\enums\AppointmentReason.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\enums\AppointmentStatus.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\enums\TimeSlotStatus.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\main\Main.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\model\Appointment.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\model\Professor.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\model\SlotTemplate.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\model\Student.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\model\TimeSlot.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\model\Timetable.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\model\TimetableEntry.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\model\User.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\model\WaitlistEntry.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\priority\PriorityCalculator.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\service\AppointmentService.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\service\AuthService.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\service\NotificationService.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\service\SlotGeneratorService.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\service\TimeSlotService.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\service\WaitlistService.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\view\LoginView.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\view\ProfessorView.java
-C:\Users\rkrom\Documents\Student Appointment System OOP\Academic-Appointment-and-Scheduling-System_OOP\src\view\StudentView.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\dao\AppointmentDAO.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\dao\DBConnection.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\dao\TimeSlotDAO.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\dao\TimetableDAO.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\dao\UserDAO.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\dao\WaitlistDAO.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\enums\AppointmentReason.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\enums\AppointmentStatus.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\enums\TimeSlotStatus.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\main\Main.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\main\service\EmailService.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\main\service\NotificationService.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\model\Appointment.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\model\Professor.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\model\SlotTemplate.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\model\Student.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\model\TimeSlot.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\model\Timetable.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\model\TimetableEntry.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\model\User.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\model\WaitlistEntry.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\priority\PriorityCalculator.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\service\AppointmentService.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\service\AuthService.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\service\NotificationService.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\service\SlotGeneratorService.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\service\TimeSlotService.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\service\WaitlistService.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\view\LoginView.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\view\ProfessorView.java
+C:\Users\ADMIN\Academic-Appointment-and-Scheduling-System_OOP\src\view\StudentView.java

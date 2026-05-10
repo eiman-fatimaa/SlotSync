@@ -1,10 +1,11 @@
 package service;
 
+import java.util.List;
+
 import dao.AppointmentDAO;
 import enums.AppointmentReason;
 import enums.AppointmentStatus;
 import model.Appointment;
-import java.util.List;
 //a service layer for appt operations - baiscally sits btw views and appouintment dao 
 public class AppointmentService {
     //dao instance will be used for all db calls
