@@ -492,6 +492,10 @@ public class ProfessorView {
             cellData.getValue().getStudent().getFirstName() + " " +
             cellData.getValue().getStudent().getLastName()));
     studentNameCol.setPrefWidth(160);
+    
+    TableColumn<WaitlistEntry, Integer> priorityCol = new TableColumn<>("Priority Score");
+    priorityCol.setCellValueFactory(new PropertyValueFactory<>("priorityScore"));
+    priorityCol.setPrefWidth(110);
 
     TableColumn<WaitlistEntry, String> joinedCol = new TableColumn<>("Joined At");
     joinedCol.setCellValueFactory(cellData ->
@@ -553,7 +557,7 @@ public class ProfessorView {
     TableView<WaitlistEntry> waitlistTable = buildStyledTable();
     waitlistTable.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
     VBox.setVgrow(waitlistTable, Priority.ALWAYS);
-    waitlistTable.getColumns().addAll(idCol, studentIdCol, studentNameCol, joinedCol, actionCol);
+    waitlistTable.getColumns().addAll(idCol, studentIdCol, studentNameCol,priorityCol, joinedCol, actionCol);
 
     // ──────────────────────────────────────────────────────────────────
     // LOAD WAITLIST WHEN SLOT SELECTED
