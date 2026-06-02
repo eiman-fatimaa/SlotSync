@@ -8,19 +8,6 @@ SlotSync is a centralized appointment scheduling system designed to manage stude
 
 SlotSync addresses the limitations of traditional or manual scheduling systems by introducing structured booking, prioritization, and automated slot management.
 
-### Screenshots
-
-| View | Preview |
-|------|--------|
-| Login Screen | ![Login Screen](images/login.png) |
-| Student Dashboard | ![Student Dashboard](images/student_dashboard.png) |
-| Professor Dashboard | ![Professor Dashboard](images/professor_dashboard.png) |
-| Booking Flow | ![Booking Flow](images/booking_flow.png) |
-
-> Replace the image paths with your actual screenshots in an `/images` folder.
-
----
-
 ## Problem Statement
 
 Traditional appointment systems often lack structure and automation, leading to:
@@ -43,6 +30,15 @@ Traditional appointment systems often lack structure and automation, leading to:
 - Automatic slot reassignment after cancellations  
 - Configurable slot generation using JSON  
 - Structured and consistent user interface  
+
+---
+### Screenshots
+
+| View | Preview |
+|------|--------|
+| Login Screen | ![Login Screen](images/login.png) |
+| Student Dashboard | ![Student Dashboard](images/student_dashboard.png) |
+| Professor Dashboard | ![Professor Dashboard](images/professor_dashboard.png) |
 
 ---
 
